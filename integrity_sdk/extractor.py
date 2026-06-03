@@ -135,6 +135,15 @@ class InferenceMetadataExtractor:
             except Exception:
                 telemetry["local_ip"] = "127.0.0.1"
 
+        # Capture Network RTT (Round Trip Time) to public DNS
+        try:
+            ping_start = time.time()
+            res = subprocess.run(["ping", "-c", "1", "-W", "1", "8.8.8.8"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if res.returncode == 0:
+                telemetry["network_rtt_ms"] = round((time.time() - ping_start) * 1000, 2)
+        except Exception:
+            pass
+
         # Extract OS and Runtime environment
         try:
             import platform
