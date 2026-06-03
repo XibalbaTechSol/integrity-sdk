@@ -94,8 +94,8 @@ def run_live_validation():
     time.sleep(2.0)
 
     # Read from SQLite to verify the row exists and the HMAC is correct
-    db_path = os.path.expanduser("~/.integrity/offline_moat.db")
-    assert_step(os.path.exists(db_path), "Local SQLite cache database 'offline_moat.db' verified on disk.")
+    db_path = os.path.expanduser("~/.integrity/offline_moat_agent_offline_test.db")
+    assert_step(os.path.exists(db_path), "Local SQLite cache database 'offline_moat_agent_offline_test.db' verified on disk.")
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()

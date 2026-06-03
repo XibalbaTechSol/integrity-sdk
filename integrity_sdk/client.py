@@ -265,7 +265,7 @@ class IntegrityClient:
         try:
             self._cache_dir = os.path.expanduser("~/.integrity")
             os.makedirs(self._cache_dir, exist_ok=True)
-            self._cache_db_path = os.path.join(self._cache_dir, "offline_moat.db")
+            self._cache_db_path = os.path.join(self._cache_dir, f"offline_moat_{self.agent_id}.db")
             conn = sqlite3.connect(self._cache_db_path)
             cursor = conn.cursor()
             cursor.execute("""
