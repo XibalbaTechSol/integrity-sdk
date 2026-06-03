@@ -25,8 +25,29 @@ class IntegrityClient:
         subagent_id: Optional[str] = None,
         enable_full_recording: bool = False,
     ):
-        # Resolve agent_id: parameter -> env variable -> system username fallback
+        # Resolve agent_id: parameter -> env variable -> script name -> directory name -> username fallback
         self.agent_id = agent_id or os.getenv("INTEGRITY_AGENT_ID")
+        if not self.agent_id:
+            try:
+                import sys
+                main_file = sys.argv[0]
+                if main_file:
+                    base_name = os.path.basename(main_file)
+                    name_without_ext = os.path.splitext(base_name)[0]
+                    # Filter out interactive/wrapper commands
+                    if name_without_ext and name_without_ext not in ("-c", "ipython", "poetry", "uv", "pip", "setup"):
+                        self.agent_id = name_without_ext
+            except Exception:
+                pass
+
+        if not self.agent_id:
+            try:
+                cwd_name = os.path.basename(os.getcwd())
+                if cwd_name:
+                    self.agent_id = cwd_name
+            except Exception:
+                pass
+
         if not self.agent_id:
             try:
                 import getpass
