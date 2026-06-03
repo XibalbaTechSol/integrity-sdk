@@ -25,12 +25,6 @@ from typing import Optional, Tuple
 
 from .hardware import generate_hardware_fingerprint, get_hardware_attestation
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-_DID_DIR = Path.home() / ".hermes" / "did"
-_DOC_PATH = _DID_DIR / "document.json"
-_KEY_PATH = _DID_DIR / "private_key.pem"
 _ORACLE_ENDPOINT = "http://localhost:3000/ingest"
 
 # ---------------------------------------------------------------------------
@@ -234,6 +228,25 @@ def get_hardware_fingerprint() -> str:
     return generate_hardware_fingerprint()
 
 
+def get_project_did_dir(agent_id: Optional[str] = None) -> Path:
+    """Find the project root (.git, pyproject.toml) and return its namespaced did directory, or fallback to ~/.hermes/did."""
+    try:
+        curr = Path(os.getcwd()).resolve()
+        for parent in [curr] + list(curr.parents):
+            if (parent / ".git").exists() or (parent / "pyproject.toml").exists() or (parent / "package.json").exists():
+                did_dir = parent / ".integrity" / "did"
+                if agent_id:
+                    return did_dir / agent_id
+                return did_dir
+    except Exception:
+        pass
+
+    base_dir = Path.home() / ".hermes" / "did"
+    if agent_id:
+        return base_dir / agent_id
+    return base_dir
+
+
 def load_or_create_did(agent_id: Optional[str] = None) -> Tuple[str, object]:
     """
     Load an existing DID and keypair from disk, or create a new one
@@ -245,9 +258,7 @@ def load_or_create_did(agent_id: Optional[str] = None) -> Tuple[str, object]:
         `did_string` is e.g. "did:xibalba:ab12cd...:agent_name"
         `keypair` exposes `.sign(data) -> bytes` and `.public_bytes_raw() -> bytes`
     """
-    did_dir = Path.home() / ".hermes" / "did"
-    if agent_id:
-        did_dir = did_dir / agent_id
+    did_dir = get_project_did_dir(agent_id)
 
     _ensure_dir(did_dir)
     doc_path = did_dir / "document.json"
@@ -303,9 +314,7 @@ def sign_payload(payload_bytes: bytes, keypair: Optional[object] = None, agent_i
 
 def load_did_document(agent_id: Optional[str] = None) -> Optional[dict]:
     """Load the DID document from disk, or None if it doesn't exist."""
-    did_dir = Path.home() / ".hermes" / "did"
-    if agent_id:
-        did_dir = did_dir / agent_id
+    did_dir = get_project_did_dir(agent_id)
     doc_path = did_dir / "document.json"
     if doc_path.exists():
         return json.loads(doc_path.read_text())
