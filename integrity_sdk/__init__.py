@@ -5,6 +5,7 @@ from .did import (
     sign_payload,
     get_hardware_fingerprint,
     load_did_document,
+    derive_evm_address,
 )
 from .hardware import (
     get_machine_id,
@@ -14,6 +15,7 @@ from .hardware import (
     generate_hardware_fingerprint,
     verify_hardware_binding,
     get_hardware_attestation,
+    get_virtualization_env,
 )
 from .integrations import IntegrityOpenAI
 
@@ -24,6 +26,7 @@ __all__ = [
     "sign_payload",
     "get_hardware_fingerprint",
     "load_did_document",
+    "derive_evm_address",
     "get_machine_id",
     "get_mac_address",
     "get_hostname",
@@ -31,5 +34,6 @@ __all__ = [
     "generate_hardware_fingerprint",
     "verify_hardware_binding",
     "get_hardware_attestation",
+    "get_virtualization_env",
     "IntegrityOpenAI",
 ]

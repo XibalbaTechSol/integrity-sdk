@@ -75,7 +75,22 @@ client.log_telemetry(
 )
 ```
 
-### 3. Universal MCP Server Setup (For Non-Programmers)
+### 3. Human-in-the-Loop (HITL) Override Tracking
+Capture manual interventions, latency, overrides, and calculate Levenshtein edit distance deltas automatically:
+
+```python
+client.log_hitl_action(
+    action_type="override", # 'approval', 'rejection', 'override'
+    proposed_content="Buy 10 AAPL",
+    final_content="Buy 15 AAPL",
+    reviewer_did="did:xibalba:human_operator_42",
+    review_latency_ms=1250.0,
+    justification="Insufficient liquidity depth",
+    extra_metadata={"order_id": "tx_9921"}
+)
+```
+
+### 4. Universal MCP Server Setup (For Non-Programmers)
 To bind the Integrity shield to your no-code agent workspaces (e.g. Cursor or Claude Desktop), add the server command to your local MCP settings:
 
 ```json

@@ -37,6 +37,31 @@ client.log_telemetry(
 )
 ```
 
+### Method: `log_model_switch`
+Logs a model switch event. Can be triggered manually or automatically inside `log_telemetry`.
+```python
+client.log_model_switch(
+    from_model="gpt-4o",
+    to_model="llama-3",
+    from_provider="openai",
+    to_provider="together",
+    reason="cost_optimization"
+)
+```
+
+### Method: `log_hitl_action`
+Logs a human-in-the-loop approval, rejection, or override action. Automatically calculates Levenshtein edit distance if `proposed_content` and `final_content` are provided.
+```python
+client.log_hitl_action(
+    action_type="override",
+    proposed_content="Buy 10 AAPL",
+    final_content="Buy 15 AAPL",
+    reviewer_did="did:xibalba:human_operator_42",
+    review_latency_ms=1250.0,
+    justification="Liquidity depth suggests higher trade size"
+)
+```
+
 ### Method: `spawn_subagent`
 Spawns a child/sub-agent client inheriting the connection, batching, and directory configurations, but using a hierarchical sub-agent DID path (`parent_id.subagent_id`).
 ```python

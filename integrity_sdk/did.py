@@ -320,3 +320,18 @@ def load_did_document(agent_id: Optional[str] = None) -> Optional[dict]:
         return json.loads(doc_path.read_text())
     return None
 
+
+def derive_evm_address(seed_bytes: bytes) -> str:
+    """
+    Derives an Ethereum-compatible address (Secp256k1) from a 32-byte private key seed.
+    If `eth_account` is not installed, falls back to a deterministic mock address.
+    """
+    try:
+        from eth_account import Account
+        acct = Account.from_key(seed_bytes)
+        return acct.address
+    except ImportError:
+        # Fallback: derive a mock EVM address from SHA-256 hash of the seed
+        h = hashlib.sha256(b"evm-address-fallback:" + seed_bytes).hexdigest()
+        return "0x" + h[:40]
+

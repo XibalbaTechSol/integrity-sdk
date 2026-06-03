@@ -95,6 +95,40 @@ def get_local_ip() -> str:
         return "127.0.0.1"
 
 
+def get_virtualization_env() -> str:
+    """
+    Detects if the system is running inside a virtualized environment (VPS/VM/Container).
+    Returns the virtualization technology (e.g., 'kvm', 'docker', 'none') or 'unknown'.
+    """
+    # 1. systemd-detect-virt (highly reliable on modern Linux)
+    try:
+        res = subprocess.run(
+            ["systemd-detect-virt"],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if res.returncode == 0:
+            return res.stdout.strip()
+    except Exception:
+        pass
+
+    # 2. Check CPU info hypervisor flags / features
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            for line in f:
+                if "hypervisor" in line.lower() or "qemu" in line.lower() or "kvm" in line.lower():
+                    return "virtualized"
+    except Exception:
+        pass
+
+    # 3. Check for typical Docker container files
+    if os.path.exists("/.dockerenv"):
+        return "docker"
+
+    return "none"
+
+
 def get_hardware_attestation() -> dict:
     """
     Return a full hardware attestation report suitable for embedding in
@@ -107,6 +141,7 @@ def get_hardware_attestation() -> dict:
         "hostname": get_hostname(),
         "cpu_model": get_cpu_model(),
         "fingerprint": generate_hardware_fingerprint(),
+        "virtualization": get_virtualization_env(),
     }
 
 

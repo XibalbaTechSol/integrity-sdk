@@ -54,6 +54,13 @@ class InferenceMetadataExtractor:
                 (extracted.get("completion_tokens", 0) * 0.000002)
             )
         
+        # Estimate virtual GPU hours based on tokens (reference: NVIDIA H100 scaling)
+        total_tokens = extracted.get("total_tokens", 0) or 0
+        if total_tokens > 0:
+            extracted["gpu_hours_used"] = round(total_tokens * 2.4e-7, 8)
+        else:
+            extracted["gpu_hours_used"] = 0.0
+
         return extracted
 
     @staticmethod
@@ -90,6 +97,13 @@ class InferenceMetadataExtractor:
                 (extracted.get("completion_tokens", 0) * 0.000015)
             )
 
+        # Estimate virtual GPU hours based on tokens (reference: NVIDIA H100 scaling)
+        total_tokens = extracted.get("total_tokens", 0) or 0
+        if total_tokens > 0:
+            extracted["gpu_hours_used"] = round(total_tokens * 2.4e-7, 8)
+        else:
+            extracted["gpu_hours_used"] = 0.0
+
         return extracted
 
     @staticmethod
@@ -111,14 +125,15 @@ class InferenceMetadataExtractor:
     @staticmethod
     def extract_system_telemetry(enable_full_recording: bool = False) -> Dict[str, Any]:
         """Extracts deep execution environment information, including CPU, VRAM, and GPU state."""
-        from .hardware import get_mac_address, get_hostname
-
+        from .hardware import get_mac_address, get_hostname, get_virtualization_env
+ 
         telemetry = {
             "cpu_percent": psutil.cpu_percent(),
             "memory_percent": psutil.virtual_memory().percent,
             "pid": os.getpid(),
             "mac_address": get_mac_address(),
             "hostname": get_hostname(),
+            "virtualization": get_virtualization_env(),
         }
 
         # Resolve primary network interface local IP

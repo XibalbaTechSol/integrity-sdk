@@ -42,7 +42,7 @@ class IntegrityCompletionsWrapper:
         if stream:
             # Wrap standard streaming generator to intercept output chunks
             response_generator = self.original_completions.create(*args, **kwargs)
-            return self._stream_interceptor(response_generator, prompt_text, start_time)
+            return self._stream_interceptor(response_generator, prompt_text, start_time, requested_model=kwargs.get("model"))
         
         # Direct non-streaming execution
         response = self.original_completions.create(*args, **kwargs)
@@ -50,19 +50,23 @@ class IntegrityCompletionsWrapper:
 
         try:
             completion_text = response.choices[0].message.content or ""
-            self._log_and_shield(prompt_text, completion_text, latency_ms)
+            model_name = getattr(response, "model", kwargs.get("model", "openai-model"))
+            self._log_and_shield(prompt_text, completion_text, latency_ms, model_name=model_name)
         except Exception as e:
             print(f"[Integrity OpenAI Wrapper] Logging failed: {e}")
 
         return response
 
-    def _stream_interceptor(self, generator, prompt_text: str, start_time: float):
+    def _stream_interceptor(self, generator, prompt_text: str, start_time: float, requested_model: Optional[str] = None):
         collected_chunks = []
+        actual_model = requested_model or "openai-model"
         for chunk in generator:
             yield chunk
             try:
                 if chunk.choices and chunk.choices[0].delta.content:
                     collected_chunks.append(chunk.choices[0].delta.content)
+                if hasattr(chunk, "model") and chunk.model:
+                    actual_model = chunk.model
             except Exception:
                 pass
         
@@ -70,11 +74,11 @@ class IntegrityCompletionsWrapper:
         completion_text = "".join(collected_chunks)
         
         try:
-            self._log_and_shield(prompt_text, completion_text, latency_ms)
+            self._log_and_shield(prompt_text, completion_text, latency_ms, model_name=actual_model)
         except Exception as e:
             print(f"[Integrity OpenAI Wrapper] Streaming log failed: {e}")
 
-    def _log_and_shield(self, prompt: str, completion: str, latency_ms: float):
+    def _log_and_shield(self, prompt: str, completion: str, latency_ms: float, model_name: str = "openai-model"):
         # Calculate local perplexity heuristics
         words = completion.split()
         unique_words = set(words)
@@ -94,7 +98,8 @@ class IntegrityCompletionsWrapper:
             "completion_length_chars": len(completion),
             "latency_ms": latency_ms,
             "unique_words_count": len(unique_words),
-            "provider": "openai-integrity-wrapper"
+            "provider": "openai-integrity-wrapper",
+            "model_name": model_name
         }
 
         self.integrity_client.log_telemetry(

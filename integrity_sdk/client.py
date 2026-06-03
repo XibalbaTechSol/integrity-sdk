@@ -68,9 +68,11 @@ class IntegrityClient:
         self._did: Optional[str] = did
         self._keypair = None
         self._hardware_fingerprint: Optional[str] = None
+        self._evm_address: Optional[str] = None
+        self._owner_address: Optional[str] = None
 
         try:
-            from .did import load_or_create_did, get_hardware_fingerprint
+            from .did import load_or_create_did, get_hardware_fingerprint, derive_evm_address
 
             if self._did is None:
                 self._did, self._keypair = load_or_create_did(self.agent_id)
@@ -93,6 +95,14 @@ class IntegrityClient:
                         )
                     except Exception:
                         self._hmac_secret = b"integrity_protocol_sqlite_cache_shared_secret"
+
+                # Derive deterministic EVM (Secp256k1) address from the master seed
+                try:
+                    seed_bytes = self._hmac_secret  # same 32-byte seed
+                    self._evm_address = derive_evm_address(seed_bytes)
+                    print(f"[IntegrityClient] Derived EVM address: {self._evm_address}")
+                except Exception as evm_exc:
+                    print(f"[IntegrityClient] EVM address derivation skipped: {evm_exc}")
             else:
                 self._hmac_secret = b"integrity_protocol_sqlite_cache_shared_secret"
         except Exception as exc:
@@ -100,6 +110,10 @@ class IntegrityClient:
             # hardware reads or key generation fail.
             self._hmac_secret = b"integrity_protocol_sqlite_cache_shared_secret"
             print(f"[IntegrityClient] DID init skipped: {exc}")
+
+        self.last_model = None
+        self.last_provider = None
+        self._lock = threading.Lock()
 
         self._running = True
         self._init_sqlite_cache()
@@ -120,6 +134,11 @@ class IntegrityClient:
     @property
     def hardware_fingerprint(self) -> Optional[str]:
         return self._hardware_fingerprint
+
+    @property
+    def wallet_address(self) -> Optional[str]:
+        """The agent's deterministically derived EVM (Secp256k1) wallet address, or None."""
+        return self._evm_address
 
     def spawn_subagent(self, subagent_id: str) -> "IntegrityClient":
         """
@@ -176,6 +195,27 @@ class IntegrityClient:
         # Ensure values stay strictly bounded between 0.0 and 1.0
         return min(max(entropy, 0.0), 1.0), min(max(grounding, 0.0), 1.0)
 
+    def log_model_switch(
+        self,
+        from_model: str,
+        to_model: str,
+        from_provider: Optional[str] = None,
+        to_provider: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> None:
+        """
+        Manually logs a model/provider switch event to the telemetry queue.
+        """
+        metadata = {
+            "event_type": "model_switch",
+            "from_model": from_model,
+            "to_model": to_model,
+            "from_provider": from_provider or "unknown",
+            "to_provider": to_provider or "unknown",
+            "reason": reason or "dynamic_dispatch",
+        }
+        self.log_telemetry(metadata=metadata, entropy=0.1, grounding=0.95)
+
     def log_telemetry(
         self,
         metadata: dict = None,
@@ -189,6 +229,23 @@ class IntegrityClient:
         """
         metadata = metadata or {}
         
+        # Check for model switch to avoid recursion and log switch event
+        if metadata.get("event_type") != "model_switch":
+            model_name = metadata.get("model_name") or metadata.get("model")
+            provider_name = metadata.get("provider") or metadata.get("framework")
+            if model_name:
+                with self._lock:
+                    if self.last_model and self.last_model != model_name:
+                        self.log_model_switch(
+                            from_model=self.last_model,
+                            to_model=model_name,
+                            from_provider=self.last_provider,
+                            to_provider=provider_name,
+                            reason="automatic_telemetry_detect"
+                        )
+                    self.last_model = model_name
+                    self.last_provider = provider_name
+
         # Calculate dynamic inference quality metrics if available in metadata
         import math
         
@@ -247,8 +304,67 @@ class IntegrityClient:
             "grounding": grounding,
             "timestamp": time.time(),
             "metadata": metadata,
+            "gpu_hours_used": metadata.get("gpu_hours_used", 0.0),
         }
         self.batcher.add_telemetry(payload)
+
+    def _calculate_edit_distance(self, s1: str, s2: str) -> int:
+        """Helper to compute Levenshtein distance between two strings."""
+        if len(s1) > len(s2):
+            s1, s2 = s2, s1
+        distances = range(len(s1) + 1)
+        for i2, c2 in enumerate(s2):
+            distances_ = [i2+1]
+            for i1, c1 in enumerate(s1):
+                if c1 == c2:
+                    distances_.append(distances[i1])
+                else:
+                    distances_.append(1 + min((distances[i1], distances[i1 + 1], distances_[-1])))
+            distances = distances_
+        return distances[-1]
+
+    def log_hitl_action(
+        self,
+        action_type: str,
+        proposed_content: Optional[str] = None,
+        final_content: Optional[str] = None,
+        reviewer_did: Optional[str] = None,
+        review_latency_ms: Optional[float] = None,
+        justification: Optional[str] = None,
+        extra_metadata: Optional[dict] = None
+    ) -> None:
+        """
+        Logs a human-in-the-loop (HITL) review, approval, or override action.
+        """
+        edit_distance = None
+        if proposed_content is not None and final_content is not None:
+            try:
+                edit_distance = self._calculate_edit_distance(proposed_content, final_content)
+            except Exception:
+                pass
+
+        metadata = {
+            "event_type": "human_in_the_loop",
+            "action_type": action_type,
+            "reviewer_did": reviewer_did or "unknown_reviewer",
+            "review_latency_ms": review_latency_ms,
+            "justification": justification,
+            "edit_distance": edit_distance,
+        }
+        if proposed_content is not None:
+            metadata["proposed_length"] = len(proposed_content)
+        if final_content is not None:
+            metadata["final_length"] = len(final_content)
+
+        if extra_metadata:
+            metadata.update(extra_metadata)
+
+        # HITL actions represent a manual override or verification; grounding is set to 1.0 (authoritative)
+        self.log_telemetry(
+            metadata=metadata,
+            entropy=0.0,
+            grounding=1.0
+        )
 
     def log_inference(
         self,
@@ -284,6 +400,126 @@ class IntegrityClient:
             grounding=grounding,
             subagent_id=subagent_id
         )
+
+    # ------------------------------------------------------------------
+    # Ownership Claim (MetaMask Association)
+    # ------------------------------------------------------------------
+
+    def generate_claim_challenge(self, owner_address: str) -> str:
+        """
+        Generates a deterministic challenge message for MetaMask signing.
+        The human operator signs this message in MetaMask to prove they
+        own the wallet and want to claim this agent.
+
+        Parameters
+        ----------
+        owner_address : str
+            The human's MetaMask wallet address (0x...)
+
+        Returns
+        -------
+        str
+            The challenge message to be signed via personal_sign in MetaMask.
+        """
+        if self._evm_address is None:
+            raise RuntimeError("Agent has no derived EVM address. Cannot generate claim challenge.")
+
+        timestamp = int(time.time())
+        challenge = (
+            f"I, {owner_address.lower()}, claim ownership of agent "
+            f"{self._evm_address.lower()} on the Xibalba Integrity Protocol. "
+            f"Timestamp: {timestamp}"
+        )
+        return challenge
+
+    def claim_ownership(
+        self,
+        owner_address: str,
+        signature: str,
+        challenge: Optional[str] = None,
+    ) -> dict:
+        """
+        Submits an ownership claim to the Oracle, binding this agent's
+        derived wallet to the human operator's MetaMask address.
+
+        Parameters
+        ----------
+        owner_address : str
+            The human's MetaMask wallet address (0x...)
+        signature : str
+            The EIP-191 personal_sign hex signature from MetaMask
+        challenge : str, optional
+            The challenge message that was signed. If not provided,
+            generates a new one (note: this won't match an already-signed challenge).
+
+        Returns
+        -------
+        dict
+            Response from the Oracle with claim status.
+
+        Raises
+        ------
+        RuntimeError
+            If the agent has no derived EVM address.
+        requests.HTTPError
+            If the Oracle rejects the claim.
+        """
+        if self._evm_address is None:
+            raise RuntimeError("Agent has no derived EVM address. Cannot claim ownership.")
+
+        if challenge is None:
+            challenge = self.generate_claim_challenge(owner_address)
+
+        # Build the Oracle base URL (strip the telemetry path)
+        base_url = self.oracle_url.rsplit('/v1/', 1)[0] if '/v1/' in self.oracle_url else self.oracle_url.rstrip('/')
+        claim_url = f"{base_url}/v1/agents/claim"
+
+        payload = {
+            "agent_wallet": self._evm_address,
+            "owner_wallet": owner_address,
+            "challenge": challenge,
+            "signature": signature,
+            "timestamp": int(time.time()),
+        }
+
+        response = requests.post(claim_url, json=payload, timeout=10.0)
+        response.raise_for_status()
+        result = response.json()
+
+        self._owner_address = owner_address
+        print(f"[IntegrityClient] Ownership claimed: {self._evm_address} -> {owner_address}")
+
+        return result
+
+    @property
+    def owner_address(self) -> Optional[str]:
+        """The MetaMask wallet address that owns this agent, if claimed."""
+        return getattr(self, '_owner_address', None)
+
+    def get_owner_agents(self, owner_address: Optional[str] = None) -> dict:
+        """
+        Queries the Oracle for all agents owned by a MetaMask wallet.
+
+        Parameters
+        ----------
+        owner_address : str, optional
+            The owner's MetaMask address. Defaults to this agent's owner.
+
+        Returns
+        -------
+        dict
+            Response with list of agents and aggregate AIS score.
+        """
+        addr = owner_address or getattr(self, '_owner_address', None)
+        if addr is None:
+            raise RuntimeError("No owner address specified and agent has no claimed owner.")
+
+        base_url = self.oracle_url.rsplit('/v1/', 1)[0] if '/v1/' in self.oracle_url else self.oracle_url.rstrip('/')
+        query_url = f"{base_url}/v1/owner/{addr}/agents"
+
+        response = requests.get(query_url, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
 
     # ------------------------------------------------------------------
     # Background worker
@@ -401,6 +637,7 @@ class IntegrityClient:
             total_grounding = sum(item.get("grounding", 0.0) for item in batch)
             avg_entropy = total_entropy / len(batch) if batch else 0.0
             avg_grounding = total_grounding / len(batch) if batch else 0.0
+            total_gpu_hours = sum(item.get("gpu_hours_used", 0.0) for item in batch)
 
             # Compile a list of all raw metadata in the batch
             raw_metadata_list = [item.get("metadata", {}) for item in batch]
@@ -413,15 +650,19 @@ class IntegrityClient:
                 "batch_size": proof_data["batch_size"],
                 "avg_entropy": avg_entropy,
                 "avg_grounding": avg_grounding,
+                "gpu_hours_used": total_gpu_hours,
                 "metadata": raw_metadata_list,
             }
 
-            # 3. Attach DID identity + signature if available
+            # 3. Attach DID identity + EVM wallet + signature if available
             if self._did is not None:
                 payload["agent_did"] = self._did
 
             if self._hardware_fingerprint is not None:
                 payload["hardware_fingerprint"] = self._hardware_fingerprint
+
+            if self._evm_address is not None:
+                payload["performer_address"] = self._evm_address
 
             # Sign ONLY the core deterministic fields to avoid floating point serialization variance
             sig_payload = {
@@ -434,6 +675,8 @@ class IntegrityClient:
                 sig_payload["agent_did"] = self._did
             if self._hardware_fingerprint is not None:
                 sig_payload["hardware_fingerprint"] = self._hardware_fingerprint
+            if self._evm_address is not None:
+                sig_payload["performer_address"] = self._evm_address
 
             serialized_payload = json.dumps(sig_payload, sort_keys=True, separators=(",", ":"))
             print(f"[DEBUG SDK] CANONICAL JSON: {serialized_payload}")
