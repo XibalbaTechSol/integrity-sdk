@@ -208,18 +208,18 @@ def _iso_now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def _ensure_dir() -> None:
-    _DID_DIR.mkdir(parents=True, exist_ok=True)
+def _ensure_dir(did_dir: Path) -> None:
+    did_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _save_private_key(pem_bytes: bytes) -> None:
+def _save_private_key(key_path: Path, pem_bytes: bytes) -> None:
     """Write the private key with 0600 permissions."""
-    _KEY_PATH.write_bytes(pem_bytes)
-    os.chmod(str(_KEY_PATH), stat.S_IRUSR | stat.S_IWUSR)
+    key_path.write_bytes(pem_bytes)
+    os.chmod(str(key_path), stat.S_IRUSR | stat.S_IWUSR)
 
 
-def _save_did_document(doc: dict) -> None:
-    _DOC_PATH.write_text(json.dumps(doc, indent=2) + "\n")
+def _save_did_document(doc_path: Path, doc: dict) -> None:
+    doc_path.write_text(json.dumps(doc, indent=2) + "\n")
 
 
 # ===================================================================
@@ -234,7 +234,7 @@ def get_hardware_fingerprint() -> str:
     return generate_hardware_fingerprint()
 
 
-def load_or_create_did() -> Tuple[str, object]:
+def load_or_create_did(agent_id: Optional[str] = None) -> Tuple[str, object]:
     """
     Load an existing DID and keypair from disk, or create a new one
     bound to the current machine's hardware fingerprint.
@@ -242,27 +242,36 @@ def load_or_create_did() -> Tuple[str, object]:
     Returns
     -------
     (did_string, keypair)
-        `did_string` is e.g. "did:xibalba:ab12cd..."
+        `did_string` is e.g. "did:xibalba:ab12cd...:agent_name"
         `keypair` exposes `.sign(data) -> bytes` and `.public_bytes_raw() -> bytes`
     """
-    _ensure_dir()
+    did_dir = Path.home() / ".hermes" / "did"
+    if agent_id:
+        did_dir = did_dir / agent_id
+
+    _ensure_dir(did_dir)
+    doc_path = did_dir / "document.json"
+    key_path = did_dir / "private_key.pem"
+
     fingerprint = generate_hardware_fingerprint()
     did = _make_did(fingerprint)
+    if agent_id:
+        did = f"{did}:{agent_id}"
 
     # --- Try loading existing key -----------------------------------------
-    if _KEY_PATH.exists() and _DOC_PATH.exists():
-        pem = _KEY_PATH.read_bytes()
+    if key_path.exists() and doc_path.exists():
+        pem = key_path.read_bytes()
         try:
             if _HAVE_CRYPTOGRAPHY and b"BEGIN XIBALBA" not in pem:
                 kp = _Ed25519Keypair.from_pem(pem)
             else:
                 kp = _DeterministicKeypair.from_pem(pem)
 
-            # Verify the on-disk DID matches current hardware
-            doc = json.loads(_DOC_PATH.read_text())
+            # Verify the on-disk DID matches current hardware & agent identity
+            doc = json.loads(doc_path.read_text())
             if doc.get("id") == did:
                 return did, kp
-            # Hardware changed – fall through to regenerate
+            # Hardware/identity changed – fall through to regenerate
         except Exception:
             pass  # corrupted key – regenerate
 
@@ -272,14 +281,14 @@ def load_or_create_did() -> Tuple[str, object]:
     else:
         kp = _DeterministicKeypair.from_fingerprint(fingerprint)
 
-    _save_private_key(kp.private_pem())
+    _save_private_key(key_path, kp.private_pem())
     doc = _build_did_document(did, kp.public_bytes_raw(), fingerprint)
-    _save_did_document(doc)
+    _save_did_document(doc_path, doc)
 
     return did, kp
 
 
-def sign_payload(payload_bytes: bytes, keypair: Optional[object] = None) -> str:
+def sign_payload(payload_bytes: bytes, keypair: Optional[object] = None, agent_id: Optional[str] = None) -> str:
     """
     Sign arbitrary bytes with the DID private key and return the
     signature as a hex string.
@@ -287,13 +296,18 @@ def sign_payload(payload_bytes: bytes, keypair: Optional[object] = None) -> str:
     If `keypair` is not provided, loads it from disk.
     """
     if keypair is None:
-        _, keypair = load_or_create_did()
+        _, keypair = load_or_create_did(agent_id)
     sig = keypair.sign(payload_bytes)
     return sig.hex()
 
 
-def load_did_document() -> Optional[dict]:
+def load_did_document(agent_id: Optional[str] = None) -> Optional[dict]:
     """Load the DID document from disk, or None if it doesn't exist."""
-    if _DOC_PATH.exists():
-        return json.loads(_DOC_PATH.read_text())
+    did_dir = Path.home() / ".hermes" / "did"
+    if agent_id:
+        did_dir = did_dir / agent_id
+    doc_path = did_dir / "document.json"
+    if doc_path.exists():
+        return json.loads(doc_path.read_text())
     return None
+

@@ -83,6 +83,18 @@ def generate_hardware_fingerprint() -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def get_local_ip() -> str:
+    """Return the primary local IP address of the machine."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
 def get_hardware_attestation() -> dict:
     """
     Return a full hardware attestation report suitable for embedding in
@@ -91,10 +103,12 @@ def get_hardware_attestation() -> dict:
     return {
         "machine_id": get_machine_id(),
         "mac_address": get_mac_address(),
+        "local_ip": get_local_ip(),
         "hostname": get_hostname(),
         "cpu_model": get_cpu_model(),
         "fingerprint": generate_hardware_fingerprint(),
     }
+
 
 
 def verify_hardware_binding(expected_fingerprint: str) -> bool:

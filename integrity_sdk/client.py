@@ -44,9 +44,9 @@ class IntegrityClient:
             from .did import load_or_create_did, get_hardware_fingerprint
 
             if self._did is None:
-                self._did, self._keypair = load_or_create_did()
+                self._did, self._keypair = load_or_create_did(self.agent_id)
             else:
-                _, self._keypair = load_or_create_did()
+                _, self._keypair = load_or_create_did(self.agent_id)
 
             self._hardware_fingerprint = get_hardware_fingerprint()
 
@@ -91,6 +91,22 @@ class IntegrityClient:
     @property
     def hardware_fingerprint(self) -> Optional[str]:
         return self._hardware_fingerprint
+
+    def spawn_subagent(self, subagent_id: str) -> "IntegrityClient":
+        """
+        Frictionless helper to spawn a child subagent instance that inherits
+        the parent configuration, DID keys, and credentials, but isolates 
+        its own telemetry tracking under a subagent namespace.
+        """
+        return IntegrityClient(
+            agent_id=self.agent_id,
+            oracle_url=self.oracle_url,
+            batch_size_limit=self.batcher.batch_size_limit,
+            flush_interval_sec=self.batcher.flush_interval_sec,
+            did=self._did,
+            subagent_id=subagent_id,
+            enable_full_recording=self.enable_full_recording,
+        )
 
     def _calculate_metrics(self, metadata: dict) -> tuple:
         """
