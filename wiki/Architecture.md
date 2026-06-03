@@ -69,9 +69,37 @@ To prevent data loss or score drawdowns when the network is unstable or the Orac
 
 ---
 
-## 4. Zero-Knowledge Integration
+## 5. Zero-Knowledge Integration
 
 The SDK implements the Aztec Noir prover framework:
 - Private inputs (such as prompt texts or fine-grained token logprobabilities) never leave the local machine.
 - The SDK compiles the private inputs using Noir local WASM or FFI bindings, computing mathematical safety metrics.
 - Only the cryptographic **ZK Proof** is packaged and sent in the telemetry payload, allowing third-party auditors to verify that safety scores were honestly computed without ever reading raw text!
+
+---
+
+## 6. Multi-Agent & Sub-Agent Context Isolation
+
+To support multiple, concurrent agents executing on the same host or cluster node, the SDK implements namespaced context isolation:
+
+```mermaid
+graph TD
+    Host[Physical Hardware Node] --> |Generates unique root DID| HW[did:xibalba:hw_fingerprint]
+    HW --> |Namespace Override / CWD| AgentA[did:xibalba:hw_fingerprint:AgentA]
+    HW --> |Namespace Override / CWD| AgentB[did:xibalba:hw_fingerprint:AgentB]
+    AgentB --> |spawn_subagent| SubAgentB[did:xibalba:hw_fingerprint:AgentB.SubAgent1]
+    
+    AgentA --> |Logs locally| DbA[(offline_moat_AgentA.db)]
+    AgentB --> |Logs locally| DbB[(offline_moat_AgentB.db)]
+    SubAgentB --> |Logs locally| DbSubB[(offline_moat_AgentB.SubAgent1.db)]
+```
+
+### 1. Independent Co-Located Agents
+When independent agents share hardware:
+* **Key Isolation**: Keys are stored at `{project_root}/.integrity/did/{agent_id}/`. This isolates public/private keys using the logical context identifier, preventing permission collisions.
+* **Database Isolation**: The local SQLite database path is resolved using the agent's name (`~/.integrity/offline_moat_{agent_id}.db`). This avoids transaction locking (`database is locked` error) when multiple processes log events simultaneously.
+
+### 2. Hierarchical Sub-Agent Mapping
+When a parent agent spawns a helper/sub-agent:
+* **Hierarchical DIDs**: The SDK constructs a nested identifier (`parent_id.child_id`).
+* **Inheritance Rules**: The parent DID key is used as the cryptographic anchor, establishing a chain of trust that the Oracle can verify to trace downstream execution limits.

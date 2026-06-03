@@ -37,6 +37,14 @@ client.log_telemetry(
 )
 ```
 
+### Method: `spawn_subagent`
+Spawns a child/sub-agent client inheriting the connection, batching, and directory configurations, but using a hierarchical sub-agent DID path (`parent_id.subagent_id`).
+```python
+sub_client = client.spawn_subagent("ScreenerSubagent")
+```
+* **Parameters**:
+  - `subagent_id` (str): Unique suffix identifier for the child agent.
+
 ### Method: `shutdown`
 Gracefully stops the background threads and flushes any cached/backlogged telemetry in SQLite.
 ```python
@@ -45,7 +53,19 @@ client.shutdown()
 
 ---
 
-## 2. Drop-In Wrapper Reference: `IntegrityOpenAI`
+## 2. Configuration & Environment Override
+
+To run or initialize the SDK dynamically without hardcoding configurations inside code, use these environment variables:
+
+| Environment Variable | Description |
+| :--- | :--- |
+| `INTEGRITY_AGENT_ID` | Override default runtime agent identifier. |
+| `INTEGRITY_ORACLE_URL` | Set the target HTTP ingest API of the oracle. |
+| `INTEGRITY_STORAGE_DIR` | Custom root directory for DID document generation. |
+
+---
+
+## 3. Drop-In Wrapper Reference: `IntegrityOpenAI`
 
 A drop-in subclass replacing the standard OpenAI client to capture cognitive metadata seamlessly.
 

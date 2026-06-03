@@ -94,10 +94,37 @@ To bind the Integrity shield to your no-code agent workspaces (e.g. Cursor or Cl
 
 ---
 
+## Multi-Agent & Sub-Agent Context Isolation
+
+The SDK supports running multiple distinct agents on a single machine without state or cryptographic key collisions.
+
+### 1. Independent Agents
+For completely unrelated agents running on the same hardware, the SDK provides isolation at two levels:
+* **Directory-Based Workspace Isolation**: The SDK resolves config and credentials relative to the current working directory (CWD), building unique keys inside `.integrity/did/{agent_id}/`.
+* **Process-Level Offline Moats**: Each agent logs to a separate namespaced SQLite cache file: `~/.integrity/offline_moat_{agent_id}.db`.
+* **Identity Resolution**: The Oracle registers them as separate entities under the same physical machine:
+  `did:xibalba:<hardware_fingerprint>:<agent_id>`
+
+To run independent agents out of the same directory, use the environment override:
+```bash
+export INTEGRITY_AGENT_ID="MyIndependentAgent"
+```
+
+### 2. Hierarchical Sub-Agents
+If a parent agent spawns a child sub-agent, they share a cryptographic hierarchy. Use the `spawn_subagent` interface:
+```python
+sub_client = client.spawn_subagent("ScreenerSubagent")
+```
+This automatically structures the child's identifier using hierarchical dot-notation:
+`did:xibalba:<hardware_fingerprint>:<parent_id>.<subagent_id>`
+
+---
+
 ## Wiki Documentation
 
 For in-depth explanations of architectural primitives, cryptographic envelopes, and metrics metrology, explore our comprehensive wiki:
 - [Wiki Home](wiki/Home.md)
 - [System Architecture & Provenance](wiki/Architecture.md)
+- [Developer Guide & API Reference](wiki/Developer-Guide.md)
 - [Cognitive Local Metrology Heuristics](wiki/Local-Metrology.md)
 - [Universal Model Context Protocol (MCP) Guide](wiki/MCP-Integration.md)
