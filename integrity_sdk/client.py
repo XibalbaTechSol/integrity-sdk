@@ -17,7 +17,7 @@ class IntegrityClient:
     """
     def __init__(
         self,
-        agent_id: str,
+        agent_id: Optional[str] = None,
         oracle_url: str = "http://localhost:3001/ingest",
         batch_size_limit: int = 50,
         flush_interval_sec: float = 5.0,
@@ -25,7 +25,15 @@ class IntegrityClient:
         subagent_id: Optional[str] = None,
         enable_full_recording: bool = False,
     ):
-        self.agent_id = agent_id
+        # Resolve agent_id: parameter -> env variable -> system username fallback
+        self.agent_id = agent_id or os.getenv("INTEGRITY_AGENT_ID")
+        if not self.agent_id:
+            try:
+                import getpass
+                self.agent_id = f"agent_{getpass.getuser()}"
+            except Exception:
+                self.agent_id = "default_agent"
+
         self.subagent_id = subagent_id
         self.enable_full_recording = enable_full_recording
         self.oracle_url = oracle_url
@@ -33,7 +41,7 @@ class IntegrityClient:
             batch_size_limit=batch_size_limit,
             flush_interval_sec=flush_interval_sec,
         )
-        self.prover = NoirProver(agent_id=agent_id)
+        self.prover = NoirProver(agent_id=self.agent_id)
 
         # ---- DID / hardware binding ----------------------------------
         self._did: Optional[str] = did
