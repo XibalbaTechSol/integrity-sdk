@@ -1,0 +1,14 @@
+# Dependencies & Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Project-level credentials (IMPORTANT: NEVER COMMIT THESE)
+.integrity/
+
+# Local databases
+*.db
+*.sqlite3
