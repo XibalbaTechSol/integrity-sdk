@@ -36,3 +36,31 @@ The SDK implements automated heuristics to verify successful execution bounds:
 - **User-in-the-Loop Hooks**: Intercepts user feedback inputs to evaluate reputation adjustments.
 
 By processing these dimensions locally, the agent self-documents its **Agent Integrity Score (AIS)**, which is then cryptographically sealed via Aztec Noir ZK-proofs and signed in transit!
+
+---
+
+## 4. Advanced Composite Risk Scoring (v2.1)
+
+The Integrity SDK v2.1 introduces an automated correlation layer that mathematically combines microscopic inference state (from LLM spans) with macroscopic host telemetry (from `psutil`) to generate 7 predictive risk indicators.
+
+### 4.1. Reconnaissance Risk Index
+**Definition**: $R = (\text{PathEntropy} \times \omega_{\text{recon\_tools}})$, where $\omega$ is a multiplier for recent tool calls in the reconnaissance set (`ls`, `find`, etc.).
+
+### 4.2. Compute Substitution Detection
+**Definition**: An anomaly detector on token latency jitter. 
+$S = 1.0$ if $\sigma(\text{latencies}) < \tau_{\text{threshold}}$, flagging unusually stable inference patterns typical of smaller, spoofed models.
+
+### 4.3. Cognitive Fatigue
+**Definition**: $F = \Delta(\text{MeanGrounding}_{t_0..t_n}, \text{MeanGrounding}_{t_m..t_z})$. Tracks the decay of RAG grounding scores over long-running sessions.
+
+### 4.4. Lateral Movement Probability
+**Definition**: $P = \frac{\text{IPEntropy}}{3.0} + \text{intent\_match}(\text{completion})$. Correlation between network destination diversity and completion text intent signals.
+
+### 4.5. Energy-to-Intent Efficiency
+**Definition**: $E = \frac{\text{TokensPerSec}}{\text{CPUUsage} + 1.0}$. Flags compute-heavy logic loops or stalled inference processes.
+
+### 4.6. Semantic Contradiction Score
+**Definition**: $C = 1.0$ iff $\text{tool\_status} == \text{FAIL} \land \text{model\_completion} == \text{SUCCESS}$.
+
+### 4.7. Workspace Blast Radius
+**Definition**: $B = \frac{\text{WriteBytes}}{\text{ReadBytes}} / 10.0$. Quantifies the potential impact of a tool call based on I/O flux.

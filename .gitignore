@@ -5,6 +5,8 @@ __pycache__/
 .venv/
 venv/
 env/
+.venv_test/
+
 
 # Project-level credentials (IMPORTANT: NEVER COMMIT THESE)
 .integrity/

@@ -1,4 +1,5 @@
 from .client import IntegrityClient
+from .universal import Integrity
 from .extractor import InferenceMetadataExtractor
 from .did import (
     load_or_create_did,

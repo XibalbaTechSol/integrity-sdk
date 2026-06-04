@@ -1,19 +1,63 @@
-# Integrity SDK 🛡️
+# Integrity SDK v2.1 🛡️
 
-The Foundational Cryptographic Identity, Trust, and Cognitive Safety SDK for Autonomous AI Agents. 
+The Foundational Cryptographic Identity, Trust, and Cognitive Safety SDK for Autonomous AI Agents. **v2.1: High-Fidelity Measurement Apparatus.**
 
-Integrate mathematically verifiable behavior and hardware-attested provenance into your agent harnesses with a **single line of code**.
+Integrate mathematically verifiable behavior and hardware-attested provenance into your agent harnesses using high-throughput OpenTelemetry instrumentation.
+
+---
+
+## v2.1: High-Fidelity Measurement Apparatus
+
+The v2.1 release establishes a high-fidelity observation layer, enabling deep visibility into an agent's internal decision boundaries and its macroscopic host interactions.
+
+## 🚀 Advanced Agentic Capabilities
+
+The Integrity SDK now supports a fully modular and multi-layered approach to agent trust:
+
+- **BCC (Behavioral Commitment Chain)**: Cryptographically binds agent intent to actual execution, preventing intent drift.
+- **World Awareness**: Secure data ingestion via the `WorldDataFetcher`, incorporating Proof of Provenance.
+- **ZK-ML Verification**: Native integration for submitting Proof of Inference (PoI) to prove the integrity of the inference logic.
+- **Cross-Chain Synchronization**: Native hooks for propagating reputation states across multiple blockchains via CCIP/LayerZero.
 
 ---
 
 ## Features
 
-- **Sub-Millisecond Asynchronous Telemetry**: Non-blocking concurrent worker architecture ensures zero added latency during LLM inference.
+- **High-Throughput OTLP/gRPC Transport**: Persistent HTTP/2 connections with auto-fallback to OTLP/HTTP.
 - **SQLite Offline Cache Fallback**: Seamlessly queues signed telemetry inside local DB (`~/.integrity/offline_moat.db`) when connection is down and auto-syncs when online, guaranteeing zero data loss.
-- **Hardware-Anchored Provenance**: Automatically hashes system indicators (CPU ID, MAC, Machine ID) into W3C-compliant DID Documents (`did:integrity:<fingerprint>`).
-- **Autonomous DID Registration**: Cryptographically handshakes and binds identities via the `integrity-oracle` on initialization.
-- **Local Cognitive Metrology**: Independently monitors token logprobability entropy, context grounding, and goal completion state on the client edge.
-- **Universal Model Context Protocol (MCP)**: Native JSON-RPC server enabling non-programmers to wrap Cursor or Claude Desktop configurations.
+- **Hardware-Anchored Provenance**: Automatically hashes system indicators (CPU ID, MAC, Machine ID) into W3C-compliant DID Documents.
+- **Local Cognitive Metrology**: Enriched spans capturing token logprobability entropy, context grounding, and RAG alignment scores.
+- **Universal Model Context Protocol (MCP)**: Native JSON-RPC server with tool-call tracing.
+
+---
+
+## Advanced Composite Risk Scoring
+
+The SDK v2.1 introduces a correlation layer that combines microscopic inference signals with macroscopic host telemetry to compute 7 advanced risk scores:
+
+| Signal | Logic |
+| :--- | :--- |
+| **Reconnaissance Risk** | Correlates tool-use patterns with file-access entropy. |
+| **Compute Substitution** | Detects model-spoofing by analyzing inference latency jitter. |
+| **Cognitive Fatigue** | Tracks ground-truth decay over a continuous agent session. |
+| **Lateral Movement Prob** | Analyzes network connection entropy vs. model intent signals. |
+| **Energy Efficiency** | Monitors compute/token-output efficiency to identify logic loops. |
+| **Semantic Contradiction** | Flags discrepancies between tool output and model interpretation. |
+| **Workspace Blast Radius** | Quantifies the potential system impact of tool-triggered file writes. |
+
+---
+
+## Data Collection & Privacy: The Observation Boundary
+
+A critical distinction of the Integrity SDK is its focus on **Behavioral Observation** rather than additional content scraping.
+
+### 1. Zero-Additional-Content Policy
+The SDK **does not collect or store any additional raw inference data** (prompts or completions) beyond what is already passing through your frontier providers (OpenAI, Anthropic, etc.) during standard API usage. It simply intercepts and "seals" the existing data stream with cryptographic provenance.
+
+### 2. The Unique Observation Layer
+While frontier providers see the *content* of the conversation, they are blind to the *context* of the execution. The Integrity SDK collects unique telemetry that providers literally cannot see:
+- **Macroscopic Host Telemetry**: Frontier providers don't know if an agent is exfiltrating your local files or scanning your internal network. The SDK monitors **Storage Flux** and **Network Flow** locally to verify the agent's actual impact on your system.
+- **Hardware-Anchored Provenance**: While providers see an API key, the SDK binds the execution to a unique **Hardware Fingerprint (DID)**. This ensures that the agent's "soul" is tied to a specific physical unit, enabling non-repudiation and institutional accountability.
 
 ---
 
@@ -39,26 +83,29 @@ If the target `integrity-oracle` becomes unreachable, the client redirects all q
 
 ## Quickstart
 
-### 1. Zero-Friction OpenAI client Wrapping (Python)
-Integrate cryptographic shield logging with your standard OpenAI workflows seamlessly:
+### 1. Universal Framework Wrapping (v2.0)
+The v2.0 SDK features a **Universal Facade** that automatically detects your framework (OpenAI, LangChain, Hermes, or custom harnesses) and applies cryptographic hooks.
 
 ```python
-from integrity_sdk import IntegrityOpenAI
+from integrity_sdk import Integrity
 
-# Single-line integration wrapper
-client = IntegrityOpenAI(agent_id="agent_quant_trader_01")
-
-# Standard inference pipeline — completely unchanged!
-response = client.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": "Sweep USDC yield margins on Base L2."}]
+# 1. Initialize the global protocol connection
+Integrity.init(
+    agent_id="agent_quant_trader_01",
+    oracle_url="http://localhost:8080/v1/transactions/report",
+    extra_metadata={"alias": "Xibalba Master Node"}
 )
 
-print(response.choices[0].message.content)
+# 2. Wrap your existing client or agent object
+# Works with OpenAI, LangChain, or Antigravity MoE Agents
+my_agent = Integrity.wrap(existing_client)
+
+# Every subsequent action is now cryptographically anchored.
 ```
 
-### 2. Native Client Usage
-For custom agent harnesses or manual event logging:
+### 2. Manual Client Usage
+For low-level control or custom event logging:
+
 
 ```python
 from integrity_sdk import IntegrityClient

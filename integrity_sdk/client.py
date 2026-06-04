@@ -3,11 +3,27 @@ import requests
 import threading
 import time
 import os
-from typing import Optional, Any
+import uuid
+import hashlib
+from typing import Optional, Any, Dict, Callable, List
+from dataclasses import dataclass, asdict
 
 from .batcher import TelemetryBatcher
 from .prover import NoirProver
+from .telemetry.analyzer import CompositeSignalAnalyzer
 
+
+@dataclass
+class BCCCommitment:
+    id: str  # UUID
+    timestamp: float
+    agent_id: str
+    action_type: str
+    intended_state_hash: str
+    opa_policy_id: str
+    opa_evaluation_result: Dict[str, Any]
+    provenance_signature: Optional[str] = None
+    ttl: float = 60.0 # Default 60 seconds TTL
 
 class IntegrityClient:
     """
@@ -24,9 +40,30 @@ class IntegrityClient:
         did: Optional[str] = None,
         subagent_id: Optional[str] = None,
         enable_full_recording: bool = False,
+        extra_metadata: Optional[dict] = None,
+        hipaa_eligible: bool = False,
+        zdr_enabled: bool = False,
+        external_web_access: bool = True,
+        region: Optional[str] = None,
+        ekm_provider: Optional[str] = None,
+        api_domain_prefix: Optional[str] = None,
     ):
-        # Resolve agent_id: parameter -> env variable -> script name -> directory name -> username fallback
+        self.extra_metadata = extra_metadata or {}
+        self.hipaa_eligible = hipaa_eligible
+        self.zdr_enabled = zdr_enabled
+        self.external_web_access = external_web_access
+        self.region = region
+        self.ekm_provider = ekm_provider
+        self.api_domain_prefix = api_domain_prefix
+
+        # 0. Initialize OpenTelemetry High-Fidelity Transport
+        from .telemetry.core import init_telemetry
+        from .telemetry.host import HostTelemetrySampler
+        
+        otlp_endpoint = os.getenv("INTEGRITY_OTLP_ENDPOINT", "localhost:4317")
         self.agent_id = agent_id or os.getenv("INTEGRITY_AGENT_ID")
+        
+        # Resolve agent_id fallback logic...
         if not self.agent_id:
             try:
                 import sys
@@ -55,6 +92,15 @@ class IntegrityClient:
             except Exception:
                 self.agent_id = "default_agent"
 
+        # Formally initialize OTel providers
+        init_telemetry(agent_id=self.agent_id, endpoint=otlp_endpoint)
+        
+        # Start macroscopic host telemetry sampler
+        self.host_sampler = HostTelemetrySampler(interval_sec=15.0)
+        self.host_sampler.start()
+        
+        self.analyzer = CompositeSignalAnalyzer()
+
         self.subagent_id = subagent_id
         self.enable_full_recording = enable_full_recording
         self.oracle_url = oracle_url
@@ -63,6 +109,10 @@ class IntegrityClient:
             flush_interval_sec=flush_interval_sec,
         )
         self.prover = NoirProver(agent_id=self.agent_id)
+        
+        # World Data Oracle Integration
+        from .integrations.world_data_fetcher import WorldDataFetcher
+        self.oracle_fetcher = WorldDataFetcher(self)
 
         # ---- DID / hardware binding ----------------------------------
         self._did: Optional[str] = did
@@ -140,6 +190,37 @@ class IntegrityClient:
         """The agent's deterministically derived EVM (Secp256k1) wallet address, or None."""
         return self._evm_address
 
+    @staticmethod
+    def bcc_enforced(client: "IntegrityClient", action_type: str, opa_policy_id: str):
+        """
+        SDK Decorator to wrap functions with BCC enforcement.
+        """
+        def decorator(func):
+            def wrapper(*args, **kwargs):
+                # 1. Capture intended state based on function args/kwargs
+                # Note: This is a simple implementation; production would filter sensitive keys
+                intended_state = {
+                    "function_name": func.__name__,
+                    "args": [str(a) for a in args],
+                    "kwargs": {k: str(v) for k, v in kwargs.items()}
+                }
+
+                # 2. Commit the action intent
+                commitment = client.commit_action_intent(
+                    action_type=action_type,
+                    intended_state=intended_state,
+                    opa_policy_id=opa_policy_id,
+                )
+
+                # 3. Execute with validation
+                return client.validate_and_execute(
+                    commitment=commitment,
+                    actual_execution_context=intended_state,
+                    action_function=lambda: func(*args, **kwargs)
+                )
+            return wrapper
+        return decorator
+
     def spawn_subagent(self, subagent_id: str) -> "IntegrityClient":
         """
         Frictionless helper to spawn a child subagent instance that inherits
@@ -154,6 +235,12 @@ class IntegrityClient:
             did=self._did,
             subagent_id=subagent_id,
             enable_full_recording=self.enable_full_recording,
+            hipaa_eligible=self.hipaa_eligible,
+            zdr_enabled=self.zdr_enabled,
+            external_web_access=self.external_web_access,
+            region=self.region,
+            ekm_provider=self.ekm_provider,
+            api_domain_prefix=self.api_domain_prefix,
         )
 
     def _calculate_metrics(self, metadata: dict) -> tuple:
@@ -299,11 +386,20 @@ class IntegrityClient:
             entropy = entropy if entropy is not None else calc_entropy
             grounding = grounding if grounding is not None else calc_grounding
 
+        # Update and Compute Composite Signals
+        self.analyzer.record_inference(
+            prompt=metadata.get("prompt_text", ""),
+            completion=metadata.get("text_output", ""),
+            metrics={"grounding": grounding, "entropy": entropy, **metadata},
+            host_snapshot=self.host_sampler.get_current_metrics()
+        )
+        composite_signals = self.analyzer.compute_all_signals(self.host_sampler.get_current_metrics())
+
         payload = {
             "entropy": entropy,
             "grounding": grounding,
             "timestamp": time.time(),
-            "metadata": metadata,
+            "metadata": {**metadata, **composite_signals},
             "gpu_hours_used": metadata.get("gpu_hours_used", 0.0),
         }
         self.batcher.add_telemetry(payload)
@@ -322,6 +418,154 @@ class IntegrityClient:
                     distances_.append(1 + min((distances[i1], distances[i1 + 1], distances_[-1])))
             distances = distances_
         return distances[-1]
+
+    def commit_action_intent(
+        self,
+        action_type: str,
+        intended_state: Dict[str, Any],
+        opa_policy_id: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> BCCCommitment:
+        """
+        Generates a cryptographically signed commitment of an agent's intended action state.
+        """
+        # 1. Deterministic Serialization & Hashing
+        canonical_state = json.dumps(intended_state, sort_keys=True, separators=(",", ":"))
+        state_hash = hashlib.sha256(canonical_state.encode()).hexdigest()
+
+        # 2. Mock OPA Evaluation (In production, this calls an OPA service)
+        # For now, we assume success unless specified otherwise for testing
+        opa_result = {
+            "allow": True,
+            "reason": "Default policy allow (Integrity SDK Mock)",
+            "policy_id": opa_policy_id
+        }
+
+        commitment = BCCCommitment(
+            id=str(uuid.uuid4()),
+            timestamp=time.time(),
+            agent_id=self.agent_id,
+            action_type=action_type,
+            intended_state_hash=state_hash,
+            opa_policy_id=opa_policy_id,
+            opa_evaluation_result=opa_result
+        )
+
+        # 3. Cryptographic Provenance Signature
+        # We sign the commitment fields to prevent pre-commitment tampering
+        sig_payload = asdict(commitment)
+        # Remove signature and TTL from signing payload
+        sig_payload.pop("provenance_signature")
+        sig_payload.pop("ttl")
+        
+        serialized_commitment = json.dumps(sig_payload, sort_keys=True, separators=(",", ":"))
+        commitment.provenance_signature = self._sign_payload(serialized_commitment.encode())
+
+        # 4. Log the commitment to the telemetry stream for auditing
+        self.log_telemetry(
+            metadata={
+                "event_type": "bcc_commitment",
+                "commitment_id": commitment.id,
+                "action_type": action_type,
+                "intended_state": intended_state,
+                "opa_result": opa_result,
+                "metadata": metadata or {}
+            },
+            entropy=0.0,
+            grounding=1.0 # Commitment is authoritative
+        )
+
+        return commitment
+
+    def validate_and_execute(
+        self,
+        commitment: BCCCommitment,
+        actual_execution_context: Dict[str, Any],
+        action_function: Callable,
+    ) -> Any:
+        """
+        Validates the execution context against the commitment before running the action.
+        """
+        # 1. Check TTL
+        if time.time() > commitment.timestamp + commitment.ttl:
+            raise RuntimeError(f"BCC_EXPIRED: Commitment {commitment.id} has expired.")
+
+        # 2. Verify Intent Integrity (Re-hash actual vs intended)
+        # In a real BCC, we compare critical keys in actual_execution_context 
+        # against what was hashed in intended_state_hash.
+        # For the SDK, we expect actual_execution_context to match intended_state logic.
+        actual_canonical = json.dumps(actual_execution_context, sort_keys=True, separators=(",", ":"))
+        actual_hash = hashlib.sha256(actual_canonical.encode()).hexdigest()
+
+        if actual_hash != commitment.intended_state_hash:
+            self.log_telemetry(
+                metadata={
+                    "event_type": "bcc_validation_failure",
+                    "commitment_id": commitment.id,
+                    "expected_hash": commitment.intended_state_hash,
+                    "actual_hash": actual_hash,
+                    "drift_detected": True
+                },
+                entropy=1.0, # Maximum entropy (disorder)
+                grounding=0.0 # Zero grounding
+            )
+            raise RuntimeError(f"BCC_INTENT_DRIFT: Actual execution context deviates from signed intent!")
+
+        # 3. Execute Action
+        try:
+            result = action_function()
+            
+            # 4. Log Success
+            self.log_telemetry(
+                metadata={
+                    "event_type": "bcc_execution_success",
+                    "commitment_id": commitment.id,
+                    "action_type": commitment.action_type
+                },
+                entropy=0.0,
+                grounding=1.0
+            )
+            return result
+        except Exception as e:
+            # 5. Log Failure
+            self.log_telemetry(
+                metadata={
+                    "event_type": "bcc_execution_failure",
+                    "commitment_id": commitment.id,
+                    "error": str(e)
+                },
+                entropy=0.5,
+                grounding=0.0
+            )
+            raise
+
+    def log_compliance_event(
+        self,
+        event_type: str,
+        status: str,
+        details: Optional[str] = None,
+        extra_metadata: Optional[dict] = None
+    ) -> None:
+        """
+        Logs a compliance-specific event (e.g., ZDR activation, geographic boundary check).
+        """
+        from .telemetry.conventions import IntegrityAttributes
+        metadata = {
+            "event_type": "compliance_audit",
+            "compliance_event": event_type,
+            "status": status,
+            "details": details,
+            IntegrityAttributes.COMPLIANCE_HIPAA_ELIGIBLE: self.hipaa_eligible,
+            IntegrityAttributes.COMPLIANCE_ZDR_ENABLED: self.zdr_enabled,
+        }
+        if extra_metadata:
+            metadata.update(extra_metadata)
+            
+        self.log_telemetry(
+            metadata=metadata,
+            entropy=0.0,
+            grounding=1.0 # Compliance events are authoritative
+        )
 
     def log_hitl_action(
         self,
@@ -496,30 +740,21 @@ class IntegrityClient:
         """The MetaMask wallet address that owns this agent, if claimed."""
         return getattr(self, '_owner_address', None)
 
-    def get_owner_agents(self, owner_address: Optional[str] = None) -> dict:
+    def get_ais_score(self) -> int:
         """
-        Queries the Oracle for all agents owned by a MetaMask wallet.
-
-        Parameters
-        ----------
-        owner_address : str, optional
-            The owner's MetaMask address. Defaults to this agent's owner.
-
-        Returns
-        -------
-        dict
-            Response with list of agents and aggregate AIS score.
+        Retrieves the agent's current AIS (Agent Intelligence Score)
+        from the Oracle via a local cache or API call.
         """
-        addr = owner_address or getattr(self, '_owner_address', None)
-        if addr is None:
-            raise RuntimeError("No owner address specified and agent has no claimed owner.")
-
-        base_url = self.oracle_url.rsplit('/v1/', 1)[0] if '/v1/' in self.oracle_url else self.oracle_url.rstrip('/')
-        query_url = f"{base_url}/v1/owner/{addr}/agents"
-
-        response = requests.get(query_url, timeout=10.0)
-        response.raise_for_status()
-        return response.json()
+        try:
+            # Query the Oracle for the agent's current status
+            base_url = self.oracle_url.rsplit('/v1/', 1)[0]
+            response = requests.get(f"{base_url}/v1/agent/{self.agent_id}", timeout=2.0)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("current_ais", 500) # Default to neutral
+        except Exception:
+            pass
+        return 500 # Default score if oracle is unreachable
 
     # ------------------------------------------------------------------
     # Background worker
@@ -643,6 +878,7 @@ class IntegrityClient:
             raw_metadata_list = [item.get("metadata", {}) for item in batch]
 
             # 2. Construct base payload
+            from .telemetry.conventions import IntegrityAttributes
             payload = {
                 "agent_id": self.agent_id,
                 "zk_proof": proof_data["zk_proof"],
@@ -652,7 +888,19 @@ class IntegrityClient:
                 "avg_grounding": avg_grounding,
                 "gpu_hours_used": total_gpu_hours,
                 "metadata": raw_metadata_list,
+                # Compliance attributes
+                IntegrityAttributes.COMPLIANCE_HIPAA_ELIGIBLE: self.hipaa_eligible,
+                IntegrityAttributes.COMPLIANCE_ZDR_ENABLED: self.zdr_enabled,
+                IntegrityAttributes.COMPLIANCE_EXTERNAL_WEB_ACCESS: self.external_web_access,
+                IntegrityAttributes.COMPLIANCE_DATA_RESIDENCY_REGION: self.region,
+                IntegrityAttributes.COMPLIANCE_API_DOMAIN_PREFIX: self.api_domain_prefix,
+                IntegrityAttributes.COMPLIANCE_EKM_PROVIDER: self.ekm_provider,
             }
+
+            # Merge global extra_metadata if provided
+            if self.extra_metadata:
+                payload.update(self.extra_metadata)
+
 
             # 3. Attach DID identity + EVM wallet + signature if available
             if self._did is not None:

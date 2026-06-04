@@ -6,6 +6,7 @@ from typing import Dict, Any, List
 # Ensure local imports work
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from integrity_sdk.client import IntegrityClient
+from integrity_sdk.telemetry.core import get_tracer
 
 class IntegrityMcpServer:
     """
@@ -14,10 +15,12 @@ class IntegrityMcpServer:
     """
     def __init__(self, agent_id: str, oracle_url: str = "http://localhost:3001/ingest"):
         self.client = IntegrityClient(agent_id=agent_id, oracle_url=oracle_url)
+        self.tracer = get_tracer("integrity_mcp_server")
         self.tools = {
             "integrity_register_agent": self.integrity_register_agent,
             "integrity_shield_payload": self.integrity_shield_payload,
             "integrity_log_metric": self.integrity_log_metric,
+            "integrity_set_compliance_profile": self.integrity_set_compliance_profile,
         }
         # Print debug to stderr to avoid corrupting stdout JSON-RPC stream
         print(f"[Integrity MCP] Initialized for Agent: {agent_id}", file=sys.stderr)
@@ -53,12 +56,13 @@ class IntegrityMcpServer:
                 "result": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "integrity-mcp-server", "version": "0.1.0"}
+                    "serverInfo": {"name": "integrity-mcp-server", "version": "0.2.0"}
                 },
                 "id": req_id
             }
 
         elif method == "tools/list":
+            # ... (omitted for brevity in replace call, but keeping logic)
             return {
                 "jsonrpc": "2.0",
                 "result": {
@@ -99,6 +103,20 @@ class IntegrityMcpServer:
                                 },
                                 "required": ["metric_name", "value"]
                             }
+                        },
+                        {
+                            "name": "integrity_set_compliance_profile",
+                            "description": "Configures the agent's compliance mode (HIPAA, ZDR, Data Residency) for subsequent actions.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "hipaa_eligible": {"type": "boolean", "description": "Enable HIPAA-eligible infrastructure controls."},
+                                    "zdr_enabled": {"type": "boolean", "description": "Confirm Zero Data Retention is active for the current provider."},
+                                    "external_web_access": {"type": "boolean", "description": "Whether the agent has access to the live internet."},
+                                    "region": {"type": "string", "description": "Geographic data residency region (e.g., 'eu-west-1', 'us-east-1')."},
+                                    "ekm_provider": {"type": "string", "description": "Enterprise Key Management provider if enabled."}
+                                }
+                            }
                         }
                     ]
                 },
@@ -109,33 +127,39 @@ class IntegrityMcpServer:
             tool_name = params.get("name")
             tool_args = params.get("arguments", {})
 
-            if tool_name in self.tools:
-                try:
-                    result = self.tools[tool_name](tool_args)
+            with self.tracer.start_as_current_span(f"mcp.tool_call.{tool_name}") as span:
+                span.set_attribute("mcp.tool.name", tool_name)
+                # Sensitive data filtering should happen here in production
+                span.set_attribute("mcp.tool.args", json.dumps(tool_args))
+                
+                if tool_name in self.tools:
+                    try:
+                        result = self.tools[tool_name](tool_args)
+                        return {
+                            "jsonrpc": "2.0",
+                            "result": {
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": json.dumps(result, indent=2)
+                                    }
+                                ]
+                            },
+                            "id": req_id
+                        }
+                    except Exception as e:
+                        span.record_exception(e)
+                        return {
+                            "jsonrpc": "2.0",
+                            "error": {"code": -32000, "message": str(e)},
+                            "id": req_id
+                        }
+                else:
                     return {
                         "jsonrpc": "2.0",
-                        "result": {
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": json.dumps(result, indent=2)
-                                }
-                            ]
-                        },
+                        "error": {"code": -32601, "message": f"Tool not found: {tool_name}"},
                         "id": req_id
                     }
-                except Exception as e:
-                    return {
-                        "jsonrpc": "2.0",
-                        "error": {"code": -32000, "message": str(e)},
-                        "id": req_id
-                    }
-            else:
-                return {
-                    "jsonrpc": "2.0",
-                    "error": {"code": -32601, "message": f"Tool not found: {tool_name}"},
-                    "id": req_id
-                }
 
         # Catch-all
         return {
@@ -164,10 +188,15 @@ class IntegrityMcpServer:
             avg_entropy=arguments.get("avg_entropy"),
             avg_grounding=arguments.get("avg_grounding")
         )
+        # Update Analyzer with tool metrics (simplified example)
+        metrics = self.client.host_sampler.get_current_metrics()
+        self.client.analyzer.record_tool_call(
+            "shield_payload", {}, "success", metrics.get("rw_ratio", 0.0)
+        )
         return {
             "status": "accepted",
             "message": "Shielded payload successfully queued for async transmission.",
-            "nonce": int(time.time() * 1000) if "time" in globals() else 1
+            "nonce": int(time.time() * 1000)
         }
 
     def integrity_log_metric(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -185,9 +214,46 @@ class IntegrityMcpServer:
             },
             payload_type="mcp_metric"
         )
+        # Update Analyzer
+        metrics = self.client.host_sampler.get_current_metrics()
+        self.client.analyzer.record_tool_call(
+            f"log_metric_{metric_name}", {}, "success", metrics.get("rw_ratio", 0.0)
+        )
         return {
             "status": "success",
             "message": f"Metric '{metric_name}' logged successfully."
+        }
+
+    def integrity_set_compliance_profile(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Dynamically updates the compliance profile of the underlying client."""
+        if "hipaa_eligible" in arguments:
+            self.client.hipaa_eligible = arguments["hipaa_eligible"]
+        if "zdr_enabled" in arguments:
+            self.client.zdr_enabled = arguments["zdr_enabled"]
+        if "external_web_access" in arguments:
+            self.client.external_web_access = arguments["external_web_access"]
+        if "region" in arguments:
+            self.client.region = arguments["region"]
+        if "ekm_provider" in arguments:
+            self.client.ekm_provider = arguments["ekm_provider"]
+
+        # Log the state change as a compliance event
+        self.client.log_compliance_event(
+            event_type="profile_update",
+            status="success",
+            details=f"Compliance profile updated via MCP: {json.dumps(arguments)}"
+        )
+
+        return {
+            "status": "success",
+            "message": "Compliance profile updated successfully.",
+            "current_state": {
+                "hipaa_eligible": self.client.hipaa_eligible,
+                "zdr_enabled": self.client.zdr_enabled,
+                "external_web_access": self.client.external_web_access,
+                "region": self.client.region,
+                "ekm_provider": self.client.ekm_provider
+            }
         }
 
 if __name__ == "__main__":

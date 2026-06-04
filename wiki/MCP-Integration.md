@@ -15,7 +15,7 @@ The MCP Server exposes high-level tools to the LLM. Instead of requiring the dev
 +--------------------+              +---------------------+          +------------------+
 ```
 
-The MCP server runs as a background process, automatically deriving hardware fingerprints, signing payload structures, maintaining strictly monotonic nonces, and transmitting telemetry asynchronously.
+The MCP server runs as a background process, automatically deriving hardware fingerprints, signing payload structures, maintaining strictly monotonic nonces, and transmitting telemetry asynchronously. **In v2.0, the MCP server automatically traces all tool call boundaries using OpenTelemetry.**
 
 ---
 
@@ -31,7 +31,8 @@ Add the following configuration block to your local Claude Desktop config file (
       "command": "python3",
       "args": ["-m", "integrity_sdk.mcp_server"],
       "env": {
-        "INTEGRITY_AGENT_ID": "claude_desktop_agent"
+        "INTEGRITY_AGENT_ID": "claude_desktop_agent",
+        "INTEGRITY_OTLP_ENDPOINT": "localhost:4317"
       }
     }
   }

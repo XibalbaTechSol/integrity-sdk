@@ -2,7 +2,15 @@
 
 Welcome to the official developer and systems architecture wiki for the **Integrity Protocol SDK**. 
 
-The Integrity SDK acts as the local **Cryptographic Prover and Spatial Envelope Generator** that secures and binds autonomous AI agent behavior to institutional accountability frameworks.
+The Integrity SDK acts as the local **High-Fidelity Measurement Apparatus** that secures and binds autonomous AI agent behavior to institutional accountability frameworks.
+
+---
+
+## v2.0 Architecture Highlights
+
+- **OTLP-Native Transport**: Utilizing gRPC and Protobuf for high-throughput, multiplexed telemetry streams.
+- **Macroscopic Host Observability**: Tracking system-level behavioral markers (Storage Flux, Network IP Entropy).
+- **Microscopic State Instrumentation**: Standardized GenAI semantic conventions for deep inference visibility.
 
 ---
 

@@ -71,7 +71,7 @@ sub_client = client.spawn_subagent("ScreenerSubagent")
   - `subagent_id` (str): Unique suffix identifier for the child agent.
 
 ### Method: `shutdown`
-Gracefully stops the background threads and flushes any cached/backlogged telemetry in SQLite.
+Gracefully stops the background threads, flushes remaining telemetry, and stops the host telemetry sampler.
 ```python
 client.shutdown()
 ```
@@ -86,11 +86,27 @@ To run or initialize the SDK dynamically without hardcoding configurations insid
 | :--- | :--- |
 | `INTEGRITY_AGENT_ID` | Override default runtime agent identifier. |
 | `INTEGRITY_ORACLE_URL` | Set the target HTTP ingest API of the oracle. |
+| `INTEGRITY_OTLP_ENDPOINT` | Set the OpenTelemetry OTLP/gRPC endpoint (default: `localhost:4317`). |
 | `INTEGRITY_STORAGE_DIR` | Custom root directory for DID document generation. |
 
 ---
 
-## 3. Drop-In Wrapper Reference: `IntegrityOpenAI`
+## 3. High-Fidelity Measurement Apparatus (v2.0)
+
+### OpenTelemetry Integration
+The SDK v2.0 is built on `opentelemetry-python`. On initialization, it automatically configures:
+- **TracerProvider**: Captures inference spans and MCP tool call boundaries.
+- **MeterProvider**: Emits host telemetry and cognitive quality metrics.
+- **Batching**: Spans and metrics are batched and exported asynchronously via OTLP/gRPC.
+
+### Host Telemetry Sampler
+The macroscopic host observer samples system state every 15 seconds:
+- **Metrics emitted**: `integrity.host.storage_flux.rw_ratio`, `integrity.host.storage_flux.path_entropy`, `integrity.host.network.ip_entropy`.
+- **Requirements**: The process must have permissions to read `/proc` (on Linux) or use `psutil` hooks.
+
+---
+
+## 4. Drop-In Wrapper Reference: `IntegrityOpenAI`
 
 A drop-in subclass replacing the standard OpenAI client to capture cognitive metadata seamlessly.
 

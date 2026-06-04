@@ -49,17 +49,37 @@ The generated public key is encapsulated into a standard W3C-compliant Decentral
 
 ---
 
-## 3. Asynchronous Spatial Envelopes (Batcher)
+## 3. High-Fidelity OTLP/gRPC Transport (v2.0)
 
-To keep API latency under sub-millisecond thresholds:
-1. When inference occurs, raw metrics are pushed onto an in-memory **thread-safe queue**.
-2. A dedicated background **daemon thread** runs a continuous loop.
-3. Every time the queue reaches its `batch_size_limit` (default: 50) or the `flush_interval_sec` (default: 5s) expires, the background worker flushes the queue.
-4. The worker bundles the telemetry items, assigns a strictly monotonic, locally-cached timestamp **nonce** to prevent replay vectors, and signs the canonical JSON string with the Ed25519 private key.
+To meet the demands of high-throughput AI systems, the SDK v2.0 utilizes the **OpenTelemetry Protocol (OTLP)** via **gRPC** as its primary transport layer.
+
+1. **Multiplexing & Efficiency**: Using gRPC over HTTP/2 allows the SDK to maintain a single persistent connection to multiplex traces, metrics, and logs. This significantly reduces connection overhead compared to traditional REST/JSON calls.
+2. **Binary Serialization**: Telemetry data is serialized into **Protocol Buffers (Protobuf)** before transmission, maximizing ingestion bandwidth over constrained or high-latency channels.
+3. **Auto-Fallback**: For environments where gRPC is blocked by firewalls or gateways, the SDK automatically falls back to **OTLP/HTTP** endpoints.
 
 ---
 
-## 4. SQLite Offline Cache Fallback
+## 4. Macroscopic Host Telemetry
+
+The SDK observes how the agent manipulates its host environment to calculate security and operational risks:
+
+- **Storage Flux (RW Ratio)**: Monitors the ratio of bytes written to bytes read. High write activity relative to read activity can indicate secure state updates, while unusual read spikes might indicate data exfiltration.
+- **Access Path Entropy**: Measures the diversity of file system paths accessed by the agent. High entropy suggests an agent is "crawling" the system maliciously rather than accessing expected workspace directories.
+- **Network Flow (IP Entropy)**: Tracks the entropy of destination IP addresses. A sudden spike in destination entropy can signal unauthorized lateral movement or reconnaissance behavior.
+
+---
+
+## 5. Microscopic Inference & MCP Tracing
+
+The SDK implements deep observability into the agent's decision boundary:
+
+- **GenAI Semantic Conventions**: Adheres to OTel v1.41 GenAI standards, capturing `gen_ai.system`, `gen_ai.agent.name`, token usage, and latency.
+- **MCP Tool Tracing**: Generates enriched spans for **Model Context Protocol (MCP)** tool calls, explicitly recording the external context passed to the model and the specific tools executed.
+- **Enriched Spans**: Prompt and completion content are captured within trace spans (where permitted), providing full visibility into the agent's internal state transitions.
+
+---
+
+## 6. SQLite Offline Cache Fallback (Preserved)
 
 To prevent data loss or score drawdowns when the network is unstable or the Oracle is offline:
 1. If the background HTTP request to `/ingest` throws a connection exception, the SDK catches the error.

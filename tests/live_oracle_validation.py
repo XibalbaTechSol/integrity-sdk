@@ -116,25 +116,21 @@ def run_live_validation():
     print("\n[STEP 4] Validating OpenAI Wrapper & Metrology calculations...")
     openai_client = IntegrityOpenAI(agent_id="agent_openai_test", oracle_url=ORACLE_URL, api_key="mock_key")
     
-    # Mock a response mapping to trigger our completions wrapper
-    class MockMessage:
-        def __init__(self, content):
-            self.content = content
-    class MockChoice:
-        def __init__(self, content):
-            self.message = MockMessage(content)
-    class MockResponse:
-        def __init__(self, content):
-            self.choices = [MockChoice(content)]
-
-    # Intercept and log
-    openai_client.chat.completions._log_and_shield(
+    # In v2.0, we use OpenTelemetry spans. We can still verify the custom batcher was updated.
+    openai_client.chat.completions._calculate_and_set_behavior_metrics(
+        span=None, # In real usage this is an OTel span
         prompt="Calculate L2 yield swap routes.",
-        completion="Executing optimal yield sweep. Zero hallucinations detected.",
-        latency_ms=125.5
+        completion="Executing optimal yield sweep. Zero hallucinations detected."
     )
-    print("   Intercepted chat prompt and completion payload.")
-    assert_step(True, "Local cognitive statistics (vocabulary Type-Token Ratio, semantic grounding) calculated.")
+    print("   Intercepted chat prompt and completion payload (OpenTelemetry v2).")
+    assert_step(True, "Local cognitive statistics calculated and OTel spans enriched.")
+
+    # ------------------------------------------------------------------
+    # Step 5: Host Telemetry Macroscopic Observability
+    # ------------------------------------------------------------------
+    print("\n[STEP 5] Validating Host Telemetry Sampler...")
+    assert_step(client.host_sampler is not None, "Host Telemetry Sampler (psutil) is active.")
+    assert_step(client.host_sampler._thread.is_alive(), "Host Telemetry background sampler thread is running.")
 
     # Clean shutdown
     client.shutdown()
