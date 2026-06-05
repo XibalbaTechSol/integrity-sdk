@@ -1,42 +1,30 @@
-# Integrity Protocol SDK Wiki 📖
+# Integrity Protocol Wiki 🛡️
 
-Welcome to the official developer and systems architecture wiki for the **Integrity Protocol SDK**. 
-
-The Integrity SDK acts as the local **High-Fidelity Measurement Apparatus** that secures and binds autonomous AI agent behavior to institutional accountability frameworks.
+The Integrity Protocol provides a Zero-Trust cryptographic gateway for autonomous AI agents. This documentation covers the core architecture, SDK integration, and advanced economic/compliance capabilities.
 
 ---
 
-## v2.0 Architecture Highlights
-
-- **OTLP-Native Transport**: Utilizing gRPC and Protobuf for high-throughput, multiplexed telemetry streams.
-- **Macroscopic Host Observability**: Tracking system-level behavioral markers (Storage Flux, Network IP Entropy).
-- **Microscopic State Instrumentation**: Standardized GenAI semantic conventions for deep inference visibility.
+## 🏗️ Core Pillars
+1. **Behavioral Commitment Chain (BCC)**: Cryptographic intent anchoring and drift detection.
+2. **Compliance-as-Code**: HIPAA-eligible infrastructure controls and Zero Data Retention (ZDR) proofs.
+3. **World Awareness**: Secure, auditable data ingestion via authenticated Oracle hooks.
+4. **Agentic Economy**: Autonomous task negotiation (`AgentMarketplace`) and automated profit sharing (`EquityDistribution`).
+5. **On-Chain Verifiability**: Multi-chain reputation synchronization and ZK-ML Proof of Inference.
 
 ---
 
-## Wiki Portals
+## 📘 Documentation Suite
+- [System Architecture & Provenance](Architecture.md)
+- [Developer Guide & API Reference](Developer-Guide.md)
+- [Cognitive Local Metrology Heuristics](Local-Metrology.md)
+- [Universal Model Context Protocol (MCP) Guide](MCP-Integration.md)
 
-### 🛡️ [System Architecture & Cryptographic Provenance](Architecture.md)
-Explore the mathematical underpinning of the Identity and Provenance engine:
-- Hardware-bound fingerprinting (CPU, MAC, Machine ID hashes).
-- W3C-compliant DID Document structures (`did:integrity:<fingerprint>`).
-- Cryptographic spatial envelope signatures and replay-attack mitigations.
-- Integration bounds with local Aztec Noir Zero-Knowledge (ZK) provers.
+---
 
-### 🧠 [Local Cognitive Metrology Heuristics](Local-Metrology.md)
-Discover how the SDK independently monitors model cognitive safety statistics directly on the edge host:
-- Local token logprobability entropy & repetition metrics.
--sliding-window context grounding calculations (RAG alignment).
-- Heuristic task completion and safety bounds.
+## 🚀 Get Started
+1. **SDK Setup**: [Developer Guide](Developer-Guide.md)
+2. **Deployment**: Follow the production readiness playbook in the repository.
+3. **Governance**: Review the `Integrity_Protocol_Governance_Proposal.md` in the `Documents` directory.
 
-### 🔌 [Universal Model Context Protocol (MCP) Guide](MCP-Integration.md)
-Enable frictionless cryptographic trust anchoring for non-programmers:
-- Adding the MCP server to Claude Desktop.
-- Setting up the MCP server inside Cursor.
-- Tool mappings, inputs, outputs, and JSON-RPC structures.
-
-### 🛠️ [Developer Guide & API Reference](Developer-Guide.md)
-Explore complete developer references, error handling strategies, and SQLite caching protocols:
-- `IntegrityClient` and `IntegrityOpenAI` API parameter references.
-- Local SQLite database WAL caching mechanics and HMAC-SHA256 tamper checks.
-- Process ID padding metrics to prevent distributed concurrency lockouts.
+---
+*Form-First Engineering. Mathematical Certainty. Proliferating the Integrity Protocol.*
