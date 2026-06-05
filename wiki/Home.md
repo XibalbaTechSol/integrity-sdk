@@ -15,6 +15,7 @@ The Integrity Protocol provides a Zero-Trust cryptographic gateway for autonomou
 
 ## 📘 Documentation Suite
 - [System Architecture & Provenance](Architecture.md)
+- [Lifecycle Mind Map Diagram](Mindmap.md)
 - [Developer Guide & API Reference](Developer-Guide.md)
 - [Cognitive Local Metrology Heuristics](Local-Metrology.md)
 - [Universal Model Context Protocol (MCP) Guide](MCP-Integration.md)

@@ -187,6 +187,7 @@ This automatically structures the child's identifier using hierarchical dot-nota
 For in-depth explanations of architectural primitives, cryptographic envelopes, and metrics metrology, explore our comprehensive wiki:
 - [Wiki Home](wiki/Home.md)
 - [System Architecture & Provenance](wiki/Architecture.md)
+- [Lifecycle Mind Map Diagram](wiki/Mindmap.md)
 - [Developer Guide & API Reference](wiki/Developer-Guide.md)
 - [Cognitive Local Metrology Heuristics](wiki/Local-Metrology.md)
 - [Universal Model Context Protocol (MCP) Guide](wiki/MCP-Integration.md)
