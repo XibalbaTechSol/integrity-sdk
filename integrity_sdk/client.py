@@ -47,6 +47,7 @@ class IntegrityClient:
         region: Optional[str] = None,
         ekm_provider: Optional[str] = None,
         api_domain_prefix: Optional[str] = None,
+        bcc_middleware_url: Optional[str] = None,
     ):
         self.extra_metadata = extra_metadata or {}
         self.hipaa_eligible = hipaa_eligible
@@ -55,6 +56,7 @@ class IntegrityClient:
         self.region = region
         self.ekm_provider = ekm_provider
         self.api_domain_prefix = api_domain_prefix
+        self.bcc_middleware_url = bcc_middleware_url or os.getenv("INTEGRITY_BCC_URL")
 
         # 0. Initialize OpenTelemetry High-Fidelity Transport
         from .telemetry.core import init_telemetry
@@ -173,8 +175,142 @@ class IntegrityClient:
         self._worker_thread.start()
 
     # ------------------------------------------------------------------
-    # Public API
+    # Public API - Identity & Registry
     # ------------------------------------------------------------------
+
+    def register_agent(
+        self,
+        eth_address: str,
+        alias: str,
+        xns_handle: Optional[str] = None,
+        description: str = "Registered via Python SDK",
+        tee_type: str = "NONE",
+        tee_measurement: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Registers a new agent with the Integrity Protocol.
+        """
+        # Build the Oracle base URL (strip the telemetry path if needed)
+        base_url = self.oracle_url.rsplit('/v1/', 1)[0] if '/v1/' in self.oracle_url else self.oracle_url.rstrip('/')
+        if base_url.endswith('/ingest'):
+            base_url = base_url.rsplit('/ingest', 1)[0]
+        
+        reg_url = f"{base_url}/v1/agent/register"
+        payload = {
+            "eth_address": eth_address,
+            "alias": alias,
+            "xns_handle": xns_handle,
+            "description": description,
+            "tee_type": tee_type,
+            "tee_measurement": tee_measurement
+        }
+        
+        response = requests.post(reg_url, json=payload, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+
+    def handshake(
+        self,
+        initiator_eth_address: str,
+        target_eth_address: str
+    ) -> Dict[str, Any]:
+        """
+        Evaluates trust between two agents before executing a deal.
+        """
+        base_url = self.oracle_url.rsplit('/v1/', 1)[0] if '/v1/' in self.oracle_url else self.oracle_url.rstrip('/')
+        if base_url.endswith('/ingest'):
+            base_url = base_url.rsplit('/ingest', 1)[0]
+            
+        handshake_url = f"{base_url}/v1/agent/handshake"
+        payload = {
+            "initiator_eth_address": initiator_eth_address,
+            "target_eth_address": target_eth_address,
+        }
+        
+        response = requests.post(handshake_url, json=payload, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+
+    def resolve_xns(self, handle: str) -> Dict[str, Any]:
+        """
+        Resolves an XNS handle to a full agent profile.
+        """
+        base_url = self.oracle_url.rsplit('/v1/', 1)[0] if '/v1/' in self.oracle_url else self.oracle_url.rstrip('/')
+        if base_url.endswith('/ingest'):
+            base_url = base_url.rsplit('/ingest', 1)[0]
+            
+        resolve_url = f"{base_url}/v1/identity/resolve"
+        response = requests.get(resolve_url, params={"handle": handle}, timeout=5.0)
+        response.raise_for_status()
+        return response.json()
+
+    def revoke_identity(self, reason: str, evidence_hash: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Deactivates the agent identity and records the revocation in the global registry.
+        """
+        base_url = self.oracle_url.rsplit('/v1/', 1)[0] if '/v1/' in self.oracle_url else self.oracle_url.rstrip('/')
+        if base_url.endswith('/ingest'):
+            base_url = base_url.rsplit('/ingest', 1)[0]
+            
+        revoke_url = f"{base_url}/v1/identity/revoke"
+        payload = {
+            "agent_address": self.agent_id, # Assuming agent_id is the address
+            "reason": reason,
+            "evidence_hash": evidence_hash
+        }
+        response = requests.post(revoke_url, json=payload, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+
+    def anchor_state(self) -> Dict[str, Any]:
+        """
+        Admin: Instructs the Oracle to anchor the global protocol state on-chain.
+        """
+        base_url = self.oracle_url.rsplit('/v1/', 1)[0] if '/v1/' in self.oracle_url else self.oracle_url.rstrip('/')
+        if base_url.endswith('/ingest'):
+            base_url = base_url.rsplit('/ingest', 1)[0]
+            
+        anchor_url = f"{base_url}/v1/protocol/anchor"
+        response = requests.post(anchor_url, timeout=30.0)
+        response.raise_for_status()
+        return response.json()
+
+    def report_transaction(
+        self,
+        deal_id: str,
+        deal_amount: float,
+        latency_ms: int,
+        accuracy_score: float,
+        gpu_hours_used: float = 0.0,
+        hitl_intervention: bool = False,
+        performance_variance: float = 0.05,
+        verification_tier: int = 1,
+        agent_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Submit a telemetry report directly to the Oracle and receive updated AIS scores.
+        Unlike log_telemetry(), this is a synchronous call to the transaction endpoint.
+        """
+        base_url = self.oracle_url.rsplit('/v1/', 1)[0] if '/v1/' in self.oracle_url else self.oracle_url.rstrip('/')
+        if base_url.endswith('/ingest'):
+            base_url = base_url.rsplit('/ingest', 1)[0]
+            
+        report_url = f"{base_url}/v1/transactions/report"
+        payload = {
+            "agent_id": agent_id or self.agent_id,
+            "deal_id": deal_id,
+            "deal_amount": deal_amount,
+            "latency_ms": latency_ms,
+            "accuracy_score": accuracy_score,
+            "gpu_hours_used": gpu_hours_used,
+            "hitl_intervention": hitl_intervention,
+            "performance_variance": performance_variance,
+            "verification_tier": verification_tier,
+        }
+        
+        response = requests.post(report_url, json=payload, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
 
     @property
     def did(self) -> Optional[str]:
@@ -490,7 +626,31 @@ class IntegrityClient:
         if time.time() > commitment.timestamp + commitment.ttl:
             raise RuntimeError(f"BCC_EXPIRED: Commitment {commitment.id} has expired.")
 
-        # 2. Verify Intent Integrity (Re-hash actual vs intended)
+        # 2. Remote Validation (Institutional Mode)
+        if self.bcc_middleware_url:
+            try:
+                payload = {
+                    "commitment": asdict(commitment),
+                    "actual_context": actual_execution_context
+                }
+                response = requests.post(
+                    f"{self.bcc_middleware_url}/v1/bcc/intercept",
+                    json=payload,
+                    timeout=5.0
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    if not result.get("authorized"):
+                        raise RuntimeError(f"BCC_MIDDLEWARE_REJECTION: {result.get('reason')}")
+                    # If authorized, we can continue to local hash check
+                else:
+                    print(f"[IntegrityClient] BCC Middleware error {response.status_code}. Falling back to local.")
+            except Exception as e:
+                if "BCC_MIDDLEWARE_REJECTION" in str(e):
+                    raise
+                print(f"[IntegrityClient] BCC Middleware unreachable: {e}. Falling back to local.")
+
+        # 3. Verify Intent Integrity (Re-hash actual vs intended)
         # In a real BCC, we compare critical keys in actual_execution_context 
         # against what was hashed in intended_state_hash.
         # For the SDK, we expect actual_execution_context to match intended_state logic.

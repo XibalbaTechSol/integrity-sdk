@@ -62,3 +62,13 @@ class Integrity:
     def log(cls, metadata: dict, **kwargs):
         """Quickly log telemetry to the global client."""
         cls.get_client().log_telemetry(metadata, **kwargs)
+
+    @classmethod
+    def register(cls, **kwargs) -> dict:
+        """Register the current agent with the protocol."""
+        return cls.get_client().register_agent(**kwargs)
+
+    @classmethod
+    def handshake(cls, **kwargs) -> dict:
+        """Perform a trust handshake between agents."""
+        return cls.get_client().handshake(**kwargs)

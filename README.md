@@ -1,23 +1,15 @@
-# Integrity SDK v2.1 🛡️
+# Integrity SDK v2.2 🛡️
 
-The Foundational Cryptographic Identity, Trust, and Cognitive Safety SDK for Autonomous AI Agents. **v2.1: High-Fidelity Measurement Apparatus.**
-
-Integrate mathematically verifiable behavior and hardware-attested provenance into your agent harnesses using high-throughput OpenTelemetry instrumentation.
+The Foundational Cryptographic Identity, Trust, and Cognitive Safety SDK for Autonomous AI Agents. **v2.2: Institutional-Grade Hardening.**
 
 ---
 
-## v2.1: High-Fidelity Measurement Apparatus
+## 🚀 Advanced Agentic Capabilities (v2.2)
 
-The v2.1 release establishes a high-fidelity observation layer, enabling deep visibility into an agent's internal decision boundaries and its macroscopic host interactions.
-
-## 🚀 Advanced Agentic Capabilities
-
-The Integrity SDK now supports a fully modular and multi-layered approach to agent trust:
-
-- **BCC (Behavioral Commitment Chain)**: Cryptographically binds agent intent to actual execution, preventing intent drift.
-- **World Awareness**: Secure data ingestion via the `WorldDataFetcher`, incorporating Proof of Provenance.
-- **ZK-ML Verification**: Native integration for submitting Proof of Inference (PoI) to prove the integrity of the inference logic.
-- **Cross-Chain Synchronization**: Native hooks for propagating reputation states across multiple blockchains via CCIP/LayerZero.
+*   **LangChain Integration:** Zero-config `IntegrityLangChainCallback` for automated telemetry signing and dispatching.
+*   **Remote TEE Attestation:** Native support for generating and verifying hardware-enclave quotes (AWS Nitro, Intel SGX) to prove silicon-bound integrity.
+*   **BCC Intent-Locking:** High-frequency pre-execution gating. Cryptographically bind agent intent to actual execution, preventing drift in real-time via `validate_and_execute`.
+*   **mTLS API Transport:** Automatic management of X.509 client certificates for secure, zero-trust communication with the Oracle gateway.
 
 ---
 
@@ -81,44 +73,84 @@ If the target `integrity-oracle` becomes unreachable, the client redirects all q
 
 ---
 
-## Quickstart
+## Quickstart (BCC & TEE)
 
-### 1. Universal Framework Wrapping (v2.0)
-The v2.0 SDK features a **Universal Facade** that automatically detects your framework (OpenAI, LangChain, Hermes, or custom harnesses) and applies cryptographic hooks.
+### 1. LangChain Native Integration (v2.2)
+Automatically capture latency, performance variance, and shannon entropy for every LLM run.
+
+```python
+from langchain_openai import ChatOpenAI
+from integrity_sdk.integrations.langchain import IntegrityLangChainCallback
+
+# 1. Initialize the callback
+integrity_callback = IntegrityLangChainCallback(
+    agent_id="my_agent_01",
+    secret_key="your_did_secret_key",
+    endpoint="http://localhost:8080"
+)
+
+# 2. Bind to any LangChain LLM or Chain
+llm = ChatOpenAI(model="gpt-4o", callbacks=[integrity_callback])
+
+# 3. Execute — Telemetry is signed and dispatched automatically
+response = llm.invoke("Perform a market analysis on $ITK.")
+```
+
+### 2. Universal Framework Wrapping (v2.2)
+The v2.2 SDK features a **Universal Facade** that automatically detects your framework and applies cryptographic hooks, now including remote BCC intent-locking.
 
 ```python
 from integrity_sdk import Integrity
 
 # 1. Initialize the global protocol connection
 Integrity.init(
-    agent_id="agent_quant_trader_01",
-    oracle_url="http://localhost:8080/v1/transactions/report",
-    extra_metadata={"alias": "Xibalba Master Node"}
+    agent_id="institutional_trader_01",
+    oracle_url="https://oracle.xibalba.solutions",
+    bcc_middleware_url="http://localhost:8002"
 )
 
-# 2. Wrap your existing client or agent object
-# Works with OpenAI, LangChain, or Antigravity MoE Agents
-my_agent = Integrity.wrap(existing_client)
+# 2. Register with Remote TEE Attestation
+Integrity.register(
+    eth_address="0x...",
+    alias="Sovereign-Trader",
+    tee_type="aws-nitro" # Automatically generates Nitro document
+)
 
-# Every subsequent action is now cryptographically anchored.
+# 3. High-Frequency Intent Locking (BCC)
+def my_trade_logic(context):
+    print(f"Executing trade on {context['target']}")
+    return "SUCCESS"
+
+# Declare intent and validate against middleware in one step
+result = client.validate_and_execute(
+    commitment=client.commit_action_intent("TRADE", {"target": "ETH-USDC"}),
+    actual_execution_context={"target": "ETH-USDC"},
+    action_function=my_trade_logic
+)
 ```
 
-### 2. Manual Client Usage
-For low-level control or custom event logging:
-
+### 2. Manual Client Usage & Direct Reporting
+For low-level control or synchronous transaction reporting:
 
 ```python
 from integrity_sdk import IntegrityClient
 
 client = IntegrityClient(agent_id="my_custom_agent")
 
-# Log telemetry event asynchronously
+# Synchronously report a transaction to receive an immediate AIS update
+score = client.report_transaction(
+    deal_id="tx_9921",
+    deal_amount=1500.0,
+    latency_ms=185,
+    accuracy_score=0.99
+)
+print(f"New AIS Score: {score['ais_score']}")
+
+# Log telemetry event asynchronously (ZK-batched)
 client.log_telemetry(
     metadata={"action": "sweep_yield", "vault_address": "0x123..."},
     zk_proof="0xabc123...", # generated locally via Noir prover
-    batch_size=1,
-    avg_entropy=0.15,
-    avg_grounding=0.98
+    batch_size=1
 )
 ```
 

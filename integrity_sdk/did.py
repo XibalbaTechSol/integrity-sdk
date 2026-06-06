@@ -20,8 +20,15 @@ import json
 import os
 import stat
 import time
+import logging
 from pathlib import Path
 from typing import Optional, Tuple
+
+try:
+    import keyring
+    _HAS_KEYRING = True
+except ImportError:
+    _HAS_KEYRING = False
 
 from .hardware import generate_hardware_fingerprint, get_hardware_attestation
 
@@ -269,7 +276,21 @@ def load_or_create_did(agent_id: Optional[str] = None) -> Tuple[str, object]:
     if agent_id:
         did = f"{did}:{agent_id}"
 
-    # --- Try loading existing key -----------------------------------------
+    # --- 1. Try loading from System Keyring (Highest Security) ---
+    if _HAS_KEYRING and agent_id:
+        try:
+            stored_pem = keyring.get_password("integrity-protocol", f"{agent_id}_private_key")
+            if stored_pem:
+                kp = _Ed25519Keypair.from_pem(stored_pem.encode()) if _HAVE_CRYPTOGRAPHY else _DeterministicKeypair.from_pem(stored_pem.encode())
+                # Verify DID Document exists and matches
+                if doc_path.exists():
+                    doc = json.loads(doc_path.read_text())
+                    if doc.get("id") == did:
+                        return did, kp
+        except Exception as e:
+            logging.warning(f"Keyring access failed for {agent_id}: {e}")
+
+    # --- 2. Try loading from Disk (Legacy/Fallback) ---
     if key_path.exists() and doc_path.exists():
         pem = key_path.read_bytes()
         try:
@@ -292,6 +313,14 @@ def load_or_create_did(agent_id: Optional[str] = None) -> Tuple[str, object]:
     else:
         kp = _DeterministicKeypair.from_fingerprint(fingerprint)
 
+    # --- Save to Keyring ---
+    if _HAS_KEYRING and agent_id:
+        try:
+            keyring.set_password("integrity-protocol", f"{agent_id}_private_key", kp.private_pem().decode())
+        except Exception as e:
+            logging.warning(f"Failed to save key to keyring: {e}")
+
+    # --- Save to Disk (Fallback) ---
     _save_private_key(key_path, kp.private_pem())
     doc = _build_did_document(did, kp.public_bytes_raw(), fingerprint)
     _save_did_document(doc_path, doc)

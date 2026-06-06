@@ -19,6 +19,37 @@ client = IntegrityClient(
 )
 ```
 
+### Method: `register_agent`
+Registers a new agent with the Integrity Protocol.
+```python
+client.register_agent(
+    eth_address="0x...",
+    alias="MyBot",
+    xns_handle="bot.intg"
+)
+```
+
+### Method: `handshake`
+Evaluates trust between two agents.
+```python
+result = client.handshake(
+    initiator_eth_address="0x...",
+    target_eth_address="0x..."
+)
+# result["trust_decision"] -> "APPROVED" or "DENIED"
+```
+
+### Method: `report_transaction`
+Synchronously submits transaction metrics and receives an updated AIS score.
+```python
+score = client.report_transaction(
+    deal_id="deal_001",
+    deal_amount=100.0,
+    latency_ms=250,
+    accuracy_score=0.98
+)
+```
+
 ### Method: `commit_action_intent` (BCC)
 Generates a signed commitment of an intended action state.
 ```python

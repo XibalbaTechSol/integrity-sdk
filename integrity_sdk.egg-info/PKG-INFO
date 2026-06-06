@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: integrity_sdk
+Version: 0.2.0
+Summary: Xibalba Integrity Protocol SDK: High-Fidelity Measurement Apparatus
+Author: Xibalba
+Requires-Dist: requests>=2.28.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: opentelemetry-api>=1.25.0
+Requires-Dist: opentelemetry-sdk>=1.25.0
+Requires-Dist: opentelemetry-exporter-otlp>=1.25.0
+Requires-Dist: psutil>=5.9.0
