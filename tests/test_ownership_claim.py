@@ -15,7 +15,7 @@ print(f"Human Wallet Address: {owner_address}")
 
 # 2. Initialize the Integrity SDK Agent
 client = IntegrityClient(
-    oracle_url="http://localhost:8080/v1/transactions/report",
+    oracle_url="http://127.0.0.1:8080/v1/transactions/report",
     agent_id="test_agent_claim_001"
 )
 agent_address = client._evm_address

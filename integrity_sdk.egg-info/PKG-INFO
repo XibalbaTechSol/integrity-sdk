@@ -1,11 +1,253 @@
 Metadata-Version: 2.4
 Name: integrity_sdk
-Version: 0.2.0
-Summary: Xibalba Integrity Protocol SDK: High-Fidelity Measurement Apparatus
-Author: Xibalba
+Version: 2.2.0
+Summary: Xibalba Integrity Protocol SDK: The Institutional Trust Layer for AI Agents
+Author-email: Xibalba Solutions <labs@xibalba.solutions>
+License: MIT
+Project-URL: Homepage, https://xibalba.solutions
+Project-URL: Documentation, https://docs.xibalba.solutions
+Project-URL: Repository, https://github.com/xibalba-solutions/integrity-protocol
+Keywords: ai,agents,reputation,web3,integrity,provenance
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Security :: Cryptography
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
 Requires-Dist: requests>=2.28.0
 Requires-Dist: pydantic>=2.0.0
 Requires-Dist: opentelemetry-api>=1.25.0
 Requires-Dist: opentelemetry-sdk>=1.25.0
 Requires-Dist: opentelemetry-exporter-otlp>=1.25.0
 Requires-Dist: psutil>=5.9.0
+Requires-Dist: keyring>=24.0.0
+Requires-Dist: boto3>=1.34.0
+Requires-Dist: eth-account>=0.11.0
+
+# Integrity SDK v2.2 🛡️
+
+The Foundational Cryptographic Identity, Trust, and Cognitive Safety SDK for Autonomous AI Agents. **v2.2: Institutional-Grade Hardening.**
+
+---
+
+## 🚀 Advanced Agentic Capabilities (v2.2)
+
+*   **LangChain Integration:** Zero-config `IntegrityLangChainCallback` for automated telemetry signing and dispatching.
+*   **Remote TEE Attestation:** Native support for generating and verifying hardware-enclave quotes (AWS Nitro, Intel SGX) to prove silicon-bound integrity.
+*   **BCC Intent-Locking:** High-frequency pre-execution gating. Cryptographically bind agent intent to actual execution, preventing drift in real-time via `validate_and_execute`.
+*   **mTLS API Transport:** Automatic management of X.509 client certificates for secure, zero-trust communication with the Oracle gateway.
+
+---
+
+## Features
+
+- **High-Throughput OTLP/gRPC Transport**: Persistent HTTP/2 connections with auto-fallback to OTLP/HTTP.
+- **SQLite Offline Cache Fallback**: Seamlessly queues signed telemetry inside local DB (`~/.integrity/offline_moat.db`) when connection is down and auto-syncs when online, guaranteeing zero data loss.
+- **Hardware-Anchored Provenance**: Automatically hashes system indicators (CPU ID, MAC, Machine ID) into W3C-compliant DID Documents.
+- **Local Cognitive Metrology**: Enriched spans capturing token logprobability entropy, context grounding, and RAG alignment scores.
+- **Universal Model Context Protocol (MCP)**: Native JSON-RPC server with tool-call tracing.
+
+---
+
+## Advanced Composite Risk Scoring
+
+The SDK v2.1 introduces a correlation layer that combines microscopic inference signals with macroscopic host telemetry to compute 7 advanced risk scores:
+
+| Signal | Logic |
+| :--- | :--- |
+| **Reconnaissance Risk** | Correlates tool-use patterns with file-access entropy. |
+| **Compute Substitution** | Detects model-spoofing by analyzing inference latency jitter. |
+| **Cognitive Fatigue** | Tracks ground-truth decay over a continuous agent session. |
+| **Lateral Movement Prob** | Analyzes network connection entropy vs. model intent signals. |
+| **Energy Efficiency** | Monitors compute/token-output efficiency to identify logic loops. |
+| **Semantic Contradiction** | Flags discrepancies between tool output and model interpretation. |
+| **Workspace Blast Radius** | Quantifies the potential system impact of tool-triggered file writes. |
+
+---
+
+## Data Collection & Privacy: The Observation Boundary
+
+A critical distinction of the Integrity SDK is its focus on **Behavioral Observation** rather than additional content scraping.
+
+### 1. Zero-Additional-Content Policy
+The SDK **does not collect or store any additional raw inference data** (prompts or completions) beyond what is already passing through your frontier providers (OpenAI, Anthropic, etc.) during standard API usage. It simply intercepts and "seals" the existing data stream with cryptographic provenance.
+
+### 2. The Unique Observation Layer
+While frontier providers see the *content* of the conversation, they are blind to the *context* of the execution. The Integrity SDK collects unique telemetry that providers literally cannot see:
+- **Macroscopic Host Telemetry**: Frontier providers don't know if an agent is exfiltrating your local files or scanning your internal network. The SDK monitors **Storage Flux** and **Network Flow** locally to verify the agent's actual impact on your system.
+- **Hardware-Anchored Provenance**: While providers see an API key, the SDK binds the execution to a unique **Hardware Fingerprint (DID)**. This ensures that the agent's "soul" is tied to a specific physical unit, enabling non-repudiation and institutional accountability.
+
+---
+
+## Installation
+
+Install the isolated library directly via pip:
+
+```bash
+pip install ./integrity-sdk
+```
+
+---
+
+## SQLite Offline Cache & HMAC Security Protocol
+
+If the target `integrity-oracle` becomes unreachable, the client redirects all queued telemetry into the local SQLite database to prevent any metric loss:
+- **Database Path**: `~/.integrity/offline_moat.db`
+- **Crypto Protection (HMAC-SHA256)**: Every row written to SQLite is bound to a cryptographic HMAC signature generated using the secret seed derived from the agent's private DID key:
+  $$\text{integrity\_hash} = \text{HMAC-SHA256}(\text{payload\_str}, \text{private\_key})$$
+- **Automatic Sync**: A background sync worker polls the Oracle every 10 seconds. Once back online, it validates row HMAC hashes (to detect database file tampering) and uploads verified payloads.
+
+---
+
+## Quickstart (BCC & TEE)
+
+### 1. LangChain Native Integration (v2.2)
+Automatically capture latency, performance variance, and shannon entropy for every LLM run.
+
+```python
+from langchain_openai import ChatOpenAI
+from integrity_sdk.integrations.langchain import IntegrityLangChainCallback
+
+# 1. Initialize the callback
+integrity_callback = IntegrityLangChainCallback(
+    agent_id="my_agent_01",
+    secret_key="your_did_secret_key",
+    endpoint="http://localhost:8080"
+)
+
+# 2. Bind to any LangChain LLM or Chain
+llm = ChatOpenAI(model="gpt-4o", callbacks=[integrity_callback])
+
+# 3. Execute — Telemetry is signed and dispatched automatically
+response = llm.invoke("Perform a market analysis on $ITK.")
+```
+
+### 2. Universal Framework Wrapping (v2.2)
+The v2.2 SDK features a **Universal Facade** that automatically detects your framework and applies cryptographic hooks, now including remote BCC intent-locking.
+
+```python
+from integrity_sdk import Integrity
+
+# 1. Initialize the global protocol connection
+Integrity.init(
+    agent_id="institutional_trader_01",
+    oracle_url="https://oracle.xibalba.solutions",
+    bcc_middleware_url="http://localhost:8002"
+)
+
+# 2. Register with Remote TEE Attestation
+Integrity.register(
+    eth_address="0x...",
+    alias="Sovereign-Trader",
+    tee_type="aws-nitro" # Automatically generates Nitro document
+)
+
+# 3. High-Frequency Intent Locking (BCC)
+def my_trade_logic(context):
+    print(f"Executing trade on {context['target']}")
+    return "SUCCESS"
+
+# Declare intent and validate against middleware in one step
+result = client.validate_and_execute(
+    commitment=client.commit_action_intent("TRADE", {"target": "ETH-USDC"}),
+    actual_execution_context={"target": "ETH-USDC"},
+    action_function=my_trade_logic
+)
+```
+
+### 2. Manual Client Usage & Direct Reporting
+For low-level control or synchronous transaction reporting:
+
+```python
+from integrity_sdk import IntegrityClient
+
+client = IntegrityClient(agent_id="my_custom_agent")
+
+# Synchronously report a transaction to receive an immediate AIS update
+score = client.report_transaction(
+    deal_id="tx_9921",
+    deal_amount=1500.0,
+    latency_ms=185,
+    accuracy_score=0.99
+)
+print(f"New AIS Score: {score['ais_score']}")
+
+# Log telemetry event asynchronously (ZK-batched)
+client.log_telemetry(
+    metadata={"action": "sweep_yield", "vault_address": "0x123..."},
+    zk_proof="0xabc123...", # generated locally via Noir prover
+    batch_size=1
+)
+```
+
+### 3. Human-in-the-Loop (HITL) Override Tracking
+Capture manual interventions, latency, overrides, and calculate Levenshtein edit distance deltas automatically:
+
+```python
+client.log_hitl_action(
+    action_type="override", # 'approval', 'rejection', 'override'
+    proposed_content="Buy 10 AAPL",
+    final_content="Buy 15 AAPL",
+    reviewer_did="did:xibalba:human_operator_42",
+    review_latency_ms=1250.0,
+    justification="Insufficient liquidity depth",
+    extra_metadata={"order_id": "tx_9921"}
+)
+```
+
+### 4. Universal MCP Server Setup (For Non-Programmers)
+To bind the Integrity shield to your no-code agent workspaces (e.g. Cursor or Claude Desktop), add the server command to your local MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "integrity-shield": {
+      "command": "python3",
+      "args": ["-m", "integrity_sdk.mcp_server"],
+      "env": {
+        "INTEGRITY_AGENT_ID": "cursor_agent_shield"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Multi-Agent & Sub-Agent Context Isolation
+
+The SDK supports running multiple distinct agents on a single machine without state or cryptographic key collisions.
+
+### 1. Independent Agents
+For completely unrelated agents running on the same hardware, the SDK provides isolation at two levels:
+* **Directory-Based Workspace Isolation**: The SDK resolves config and credentials relative to the current working directory (CWD), building unique keys inside `.integrity/did/{agent_id}/`.
+* **Process-Level Offline Moats**: Each agent logs to a separate namespaced SQLite cache file: `~/.integrity/offline_moat_{agent_id}.db`.
+* **Identity Resolution**: The Oracle registers them as separate entities under the same physical machine:
+  `did:xibalba:<hardware_fingerprint>:<agent_id>`
+
+To run independent agents out of the same directory, use the environment override:
+```bash
+export INTEGRITY_AGENT_ID="MyIndependentAgent"
+```
+
+### 2. Hierarchical Sub-Agents
+If a parent agent spawns a child sub-agent, they share a cryptographic hierarchy. Use the `spawn_subagent` interface:
+```python
+sub_client = client.spawn_subagent("ScreenerSubagent")
+```
+This automatically structures the child's identifier using hierarchical dot-notation:
+`did:xibalba:<hardware_fingerprint>:<parent_id>.<subagent_id>`
+
+---
+
+## Wiki Documentation
+
+For in-depth explanations of architectural primitives, cryptographic envelopes, and metrics metrology, explore our comprehensive wiki:
+- [Wiki Home](wiki/Home.md)
+- [System Architecture & Provenance](wiki/Architecture.md)
+- [Lifecycle Mind Map Diagram](wiki/Mindmap.md)
+- [Developer Guide & API Reference](wiki/Developer-Guide.md)
+- [Cognitive Local Metrology Heuristics](wiki/Local-Metrology.md)
+- [Universal Model Context Protocol (MCP) Guide](wiki/MCP-Integration.md)

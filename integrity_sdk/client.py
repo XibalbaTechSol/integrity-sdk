@@ -1116,3 +1116,64 @@ class IntegrityClient:
                 break
             self._process_and_send(batch)
 
+    def get_owner_agents(self, owner_address: str) -> dict:
+        """Retrieves all agents owned by a specific human wallet address."""
+        base_url = self.oracle_url.rsplit('/v1/', 1)[0] if '/v1/' in self.oracle_url else self.oracle_url.rstrip('/')
+        url = f"{base_url}/v1/owner/{owner_address}/agents"
+        
+        response = requests.get(url, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+
+    # --- Institutional & Economic Expansion ---
+
+    def stake_itk(self, amount: float) -> dict:
+        """Stakes ITK tokens for the current agent."""
+        url = f"{self._get_base_url()}/v1/agent/{self._evm_address}/stake"
+        response = requests.post(url, json={"amount_itk": amount}, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+
+    def unstake_itk(self, amount: float) -> dict:
+        """Unstakes ITK tokens for the current agent."""
+        url = f"{self._get_base_url()}/v1/agent/{self._evm_address}/unstake"
+        response = requests.post(url, json={"amount_itk": amount}, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+
+    def get_credit_profile(self) -> dict:
+        """Retrieves the credit profile and active loans for the agent."""
+        url = f"{self._get_base_url()}/v1/agent/{self._evm_address}/credit/profile"
+        response = requests.get(url, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+
+    def borrow_itk(self, amount: float, term_days: int = 30) -> dict:
+        """Applies for an institutional loan via the Integrity Protocol."""
+        url = f"{self._get_base_url()}/v1/agent/{self._evm_address}/credit/borrow"
+        payload = {"amount_itk": amount, "term_days": term_days}
+        response = requests.post(url, json=payload, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+
+    def request_audit(self, platinum: bool = False) -> dict:
+        """Formally requests an institutional certification audit."""
+        url = f"{self._get_base_url()}/v1/audit/request"
+        payload = {
+            "agent_address": self._evm_address,
+            "audit_type": "PLATINUM" if platinum else "AUTOMATED"
+        }
+        response = requests.post(url, json=payload, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+
+    def get_provenance(self) -> list:
+        """Fetches the forensic provenance audit trail for the agent."""
+        url = f"{self._get_base_url()}/v1/agent/{self._evm_address}/provenance"
+        response = requests.get(url, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+
+    def _get_base_url(self) -> str:
+        return self.oracle_url.rsplit('/v1/', 1)[0] if '/v1/' in self.oracle_url else self.oracle_url.rstrip('/')
+
